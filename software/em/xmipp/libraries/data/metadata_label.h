@@ -213,6 +213,7 @@ enum MDLabel
     MDL_DATE,// < timestamp (string)
     MDL_TIME,// <  time in seconds (double)
 
+    MDL_FAST2D_CENTROID, ///< Centroid of a cluster for the FAST2D classification
     MDL_FLIP, ///< Flip the image? (bool)
     MDL_FOM, ///< Figure of Merit in 0-1 range (double)
     MDL_FRAME_ID, ///< Unique id of frame inside a Movie
@@ -1593,6 +1594,7 @@ private:
         MDL::addLabel(MDL_DATE, LABEL_STRING, "date");
         MDL::addLabel(MDL_TIME, LABEL_DOUBLE, "time");
 
+        MDL::addLabel(MDL_FAST2D_CENTROID, LABEL_STRING, "fast2DCentroid");
         MDL::addLabel(MDL_FLIP, LABEL_BOOL, "flip");
         MDL::addLabelAlias(MDL_FLIP, "Flip");
         MDL::addLabel(MDL_FOM, LABEL_DOUBLE, "fom");

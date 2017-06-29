@@ -69,6 +69,7 @@ from protocol_apply_transformation_matrix import XmippProtApplyTransformationMat
 from protocol_break_symmetry import XmippProtAngBreakSymmetry
 from protocol_cl2d_align import XmippProtCL2DAlign
 from protocol_cl2d import XmippProtCL2D
+from protocol_classify_fast2d import XmippProtFastClassif2D
 from protocol_cltomo import XmippProtCLTomo
 # from protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from protocol_compare_reprojections import XmippProtCompareReprojections
