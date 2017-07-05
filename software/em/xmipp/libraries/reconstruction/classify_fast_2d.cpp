@@ -522,6 +522,7 @@ void ProgClassifyFast2D::run()
         {
             SF.getRow(row, clusters[i].getPoint(j).getID());
             MDclass.addRow(row);
+            MDclass.setValue(MDL_REF, i+1, j+1);
             MDclass.write(formatString("class%06d_images@%s", i+1, fnOut.c_str()), MD_APPEND);
         }
     }

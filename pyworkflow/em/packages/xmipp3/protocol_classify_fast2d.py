@@ -276,13 +276,9 @@ class XmippProtFastClassif2D(ProtClassify2D):
 
     def _updateParticle(self, item, row):
         item.setClassId(row.getValue(md.MDL_REF))
-        # print("...md.MDL_REF.........")
-        # print(md.MDL_REF)
 
     def _updateClass(self, item):
         classId = item.getObjId()
-        # print(".....item.getObjId()......")
-        # print(item.getObjId())
         if classId in self._classesInfo:
             index, fn, _ = self._classesInfo[classId]
             item.setAlignment2D()
@@ -305,12 +301,10 @@ class XmippProtFastClassif2D(ProtClassify2D):
     def _fillClassesFromLevel(self, clsSet):
         """ Create the SetOfClasses2D from a given iteration. """
         self._loadClassesInfo(self._getExtraPath('output.xmd'))
-        xmpMd = self._getExtraPath('images.xmd')
-
+        xmpMd = self._getExtraPath('output.xmd')
         iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
                                     updateItemCallback=self._updateParticle,
                                     skipDisabled=True)
-
         # itemDataIterator is not neccesary because, the class SetMdIterator
         # contain all the information about the metadata
         clsSet.classifyItems(updateItemCallback=iterator.updateItem,
