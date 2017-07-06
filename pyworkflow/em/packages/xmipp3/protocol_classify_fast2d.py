@@ -186,8 +186,9 @@ class XmippProtFastClassif2D(ProtClassify2D):
             # Persist changes
             self._store(outputAttr)
         else:
+            inputs = self.inputParticles.get()
             # Here the defineOutputs function will call the write() method
-            classes2DSet = self._createSetOfClasses2D(self.inputParticles.get())
+            classes2DSet = self._createSetOfClasses2D(inputs)
             self._fillClassesFromLevel(classes2DSet)
 
             outputSet = {'outputClasses': classes2DSet}
@@ -229,17 +230,6 @@ class XmippProtFastClassif2D(ProtClassify2D):
             args += ' -c %(nref0)s'
         return args
 
-    def _getOutputParticle(self, part):
-        """ Return the name of the output particle, given
-        the input Particle object.
-        """
-        fn = str(part.getObjId()) + "_" + part.getFileName()
-        extFn = getExt(fn)
-        if extFn != ".stk":
-            fn = replaceExt(fn, "stk")
-        fnOut = self._getExtraPath(basename(fn))
-        return fnOut
-
     def _readDoneList(self):
         """ Read from a text file the id's of the items that have been done. """
         doneFile = self._getAllDone()
@@ -277,6 +267,7 @@ class XmippProtFastClassif2D(ProtClassify2D):
     def _updateParticle(self, item, row):
         item.setClassId(row.getValue(md.MDL_REF))
 
+
     def _updateClass(self, item):
         classId = item.getObjId()
         if classId in self._classesInfo:
@@ -286,7 +277,8 @@ class XmippProtFastClassif2D(ProtClassify2D):
             rep.setLocation(index, fn)
             rep.setSamplingRate(self.inputParticles.get().getSamplingRate())
 
-    def _loadClassesInfo(self, filename):
+
+    def _loadClassesInfo(self, filename, blockId):
         """ Read some information about the produced 2D classes
         from the metadata file.
         """
@@ -294,18 +286,20 @@ class XmippProtFastClassif2D(ProtClassify2D):
         mdClasses = md.MetaData(filename)
         for classNumber, row in enumerate(md.iterRows(mdClasses)):
             index, fn = xmippToLocation(row.getValue(md.MDL_IMAGE))
-            # Store info indexed by id, we need to store the row.clone() since
-            # the same reference is used for iteration
-            self._classesInfo[classNumber + 1] = (index, fn, row.clone())
+            self._classesInfo[blockId] = (index, fn, row.clone())
+
 
     def _fillClassesFromLevel(self, clsSet):
         """ Create the SetOfClasses2D from a given iteration. """
-        self._loadClassesInfo(self._getExtraPath('output.xmd'))
-        xmpMd = self._getExtraPath('output.xmd')
-        iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
-                                    updateItemCallback=self._updateParticle,
-                                    skipDisabled=True)
-        # itemDataIterator is not neccesary because, the class SetMdIterator
-        # contain all the information about the metadata
-        clsSet.classifyItems(updateItemCallback=iterator.updateItem,
-                             updateClassCallback=self._updateClass)
+        blocks = md.getBlocksInMetaDataFile(self._getExtraPath('output.xmd'))
+        for blockId, block in enumerate(blocks):
+            if block.startswith('class0'):
+                self._loadClassesInfo(self._getExtraPath("level_00/%s_classes.stk" % block), blockId)
+                xmpMd = block + "@" + self._getExtraPath('output.xmd')
+                iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
+                                            updateItemCallback=self._updateParticle,
+                                            skipDisabled=True)
+                # itemDataIterator is not neccesary because, the class SetMdIterator
+                # contain all the information about the metadata
+                clsSet.classifyItems(updateItemCallback=iterator.updateItem,
+                                     updateClassCallback=self._updateClass)
