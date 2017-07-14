@@ -94,6 +94,8 @@ class XmippProtFastClassif2D(ProtClassify2D):
         deps = []
         stepId = self._insertStepsForParticles(self._getExtraPath("images.xmd"), self._getExtraPath("output.xmd"))
         deps.append(stepId)
+        # stepId = self._insertStepsForParticles(self._getExtraPath("images2.xmd"), self._getExtraPath("output.xmd"))
+        # deps.append(stepId)
         for part in inputParts:
             if part.getObjId() not in insertedDict:
                 insertedDict[part.getObjId()] = stepId
@@ -208,6 +210,7 @@ class XmippProtFastClassif2D(ProtClassify2D):
         args = "-i %s -o %s -k %d" % (fnInputMd, fnOutputMd, self.numberOfClasses.get())
         self.runJob("xmipp_classify_fast_2d", args)
 
+        cleanPath(self._getExtraPath("level_00"))
         blocks = md.getBlocksInMetaDataFile(fnOutputMd)
         fnDir = self._getExtraPath()
         # Gather all images in block

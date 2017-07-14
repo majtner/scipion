@@ -326,6 +326,43 @@ public:
 			iter++;
 		}
 
+        // TO REMOVE OUTLIERS
+        double dist, sum, stddev;
+        std::vector<double> cluster_point_dist;
+        for(int i = 0; i < K; i++)
+		{
+		    dist = 0.0;
+		    int points_orig_total = clusters[i].getTotalPoints();
+
+            for(int p = 0; p < points_orig_total; p++)
+            {
+                sum = 0.0;
+                for(int j = 0; j < total_values; j++)
+                {
+                    sum += pow(clusters[i].getCentralValue(j) -
+                               clusters[i].getPoint(p).getValue(j), 2.0);
+                }
+                cluster_point_dist.push_back(sqrt(sum));
+                dist += sqrt(sum)/points_orig_total;
+			}
+
+			for(int p = 0; p < points_orig_total; p++)
+            {
+                stddev += pow(cluster_point_dist[p] - dist, 2.0);
+			}
+			stddev = sqrt(stddev / points_orig_total);
+
+            int pp = 0;
+			for(int p = 0; p < points_orig_total; p++)
+            {
+                // Swich this condition for displaying eliminated particles
+                if ((cluster_point_dist[p] > (dist + 1.5*stddev)) || (cluster_point_dist[p] < (dist - 1.5*stddev)))
+                    clusters[i].removePoint(clusters[i].getPoint(pp).getID());
+                else pp++;
+			}
+        }
+
+
         std::ofstream saveClusters;
         saveClusters.open(fnClusters.c_str());
 
@@ -339,69 +376,6 @@ public:
         }
         saveClusters.close();
 
-
-/*
-int k1[] = {12,20,26,27,32,40,56,59,64,84,86,88,89,92,107,110,117,121,122,125,129,137,148,173,174,177,180};
-int k2[] = {3,7,35,39,43,63,71,75,79,95,112,116,142,156,172};
-int k3[] = {22,62,70,82,98,106,119,143,155,167,171,179,183};
-double avrg1[8] = {0};
-double avrg2[8] = {0};
-double avrg3[8] = {0};
-double avrg4[8] = {0};
-for(int i = 0; i < total_points; i++)
-{
-    for(int j = 0; j < total_values; j++)
-    {
-        if(std::find (k1, k1+27, points[i].getID()) != k1+27)
-            avrg1[j] += points[i].getValue(j);
-        else if(std::find (k2, k2+15, points[i].getID()) != k2+15)
-            avrg2[j] += points[i].getValue(j);
-        else if(std::find (k3, k3+13, points[i].getID()) != k3+13)
-            avrg3[j] += points[i].getValue(j);
-        else avrg4[j] += points[i].getValue(j);
-    }
-}
-
-for(int j = 0; j < total_values; j++)
-    std::cerr << avrg1[j] / 27.0 << " ";
-std::cerr << std::endl;
-for(int j = 0; j < total_values; j++)
-    std::cerr << avrg2[j] / 15.0 << " ";
-std::cerr << std::endl;
-for(int j = 0; j < total_values; j++)
-    std::cerr << avrg3[j] / 13.0 << " ";
-std::cerr << std::endl;
-for(int j = 0; j < total_values; j++)
-    std::cerr << avrg4[j] / 128.0 << " ";
-std::cerr << std::endl;
-*/
-
-/*
-for(int i = 0; i < K; i++)
-{
-    double avrg[8] = {0};
-
-    for(int p = 0; p < clusters[i].getTotalPoints(); p++)
-    {
-        //std::cerr << p+1 << " (" << clusters[i].getTotalPoints() << ") -> ";
-        for(int j = 0; j < total_values; j++)
-        {
-            //std::cerr << clusters[i].getPoint(p).getValue(j) << " ";
-            avrg[j] += clusters[i].getPoint(p).getValue(j);
-        }
-        //std::cerr << std::endl;
-    }
-
-    //std::cerr << std::endl;
-    for(int j = 0; j < total_values; j++)
-    {
-        //std::cerr << "avrg[j] (" << avrg[j] << ") / clusters[i].getTotalPoints() (" << clusters[i].getTotalPoints() << ") = " << avrg[j] / clusters[i].getTotalPoints() << std::endl;
-        std::cerr << avrg[j] / clusters[i].getTotalPoints() << " ";
-    }
-    std::cerr << std::endl;
-}
-*/
-
         return clusters;
 	}
 };
@@ -411,6 +385,55 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
 {
     double avg, stddev, min, max;
     std::vector<double> feature_vector;
+
+    // LBP
+    unsigned char code;
+    double center;
+    int lbp_hist[256] = {};
+    for (int y=1; y<(YSIZE(Iref())-1); y++)
+    {
+        for (int x=1; x<(XSIZE(Iref())-1); x++)
+        {
+            code = 0;
+            center = DIRECT_A2D_ELEM(Iref(),y,x);
+            code |= (DIRECT_A2D_ELEM(Iref(),y-1,x-1) > center) << 7;
+            code |= (DIRECT_A2D_ELEM(Iref(),y-1,x  ) > center) << 6;
+            code |= (DIRECT_A2D_ELEM(Iref(),y-1,x+1) > center) << 5;
+            code |= (DIRECT_A2D_ELEM(Iref(),y,  x+1) > center) << 4;
+            code |= (DIRECT_A2D_ELEM(Iref(),y+1,x+1) > center) << 3;
+            code |= (DIRECT_A2D_ELEM(Iref(),y+1,x  ) > center) << 2;
+            code |= (DIRECT_A2D_ELEM(Iref(),y+1,x-1) > center) << 1;
+            code |= (DIRECT_A2D_ELEM(Iref(),y  ,x-1) > center) << 0;
+            int code_min = (int) code;
+            for (int i=0; i<7; i++)
+            {
+                unsigned char c = code & 1;  // extract the low bit
+                code >>= 1;  // shift right
+                code |= (c << 7);  // put the previous low bit in the high bit
+                if ((int) code < code_min)
+                    code_min = (int) code;
+            }
+            lbp_hist[code_min]++;
+        }
+    }
+
+    for (int i=0; i<256; i++)
+        feature_vector.push_back(lbp_hist[i]);
+
+    // ENTROPY
+/*    int hist[256] = {};
+    FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref())
+    {
+        int idx = floor(((DIRECT_MULTIDIM_ELEM(Iref(),n) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
+        hist[idx]++;
+    }
+    double entropy = 0;
+    for (int i=0; i<256; i++)
+    {
+        entropy += std::max(hist[i], 1) * log2((std::max(hist[i], 1)));
+    }
+    feature_vector.push_back(entropy);*/
+
 
     if (XSIZE(masks[0]) < 1)
     {
@@ -432,8 +455,8 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
 //            // BinaryCircularMask(masks[1], wave_size - 2*wave_size_step);
 //
 //            FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(masks[0])
-//            DIRECT_MULTIDIM_ELEM(masks[i],n) = DIRECT_MULTIDIM_ELEM(masks[0],n) -
-//                                               DIRECT_MULTIDIM_ELEM(masks[1],n);
+//                DIRECT_MULTIDIM_ELEM(masks[i],n) = DIRECT_MULTIDIM_ELEM(masks[0],n) -
+//                                                   DIRECT_MULTIDIM_ELEM(masks[1],n);
 //
 //            wave_size -= wave_size_step;
 //        }
@@ -444,26 +467,30 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
             BinaryCircularMask(masks[1], wave_size - wave_size_step);
 
             FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(masks[0])
-            DIRECT_MULTIDIM_ELEM(masks[i],n) = 2*DIRECT_MULTIDIM_ELEM(masks[1],n) -
-                                               DIRECT_MULTIDIM_ELEM(masks[0],n);
+                DIRECT_MULTIDIM_ELEM(masks[i],n) = 2*DIRECT_MULTIDIM_ELEM(masks[1],n) -
+                                                   DIRECT_MULTIDIM_ELEM(masks[0],n);
 
             BinaryCircularMask(masks[1], wave_size - 2*wave_size_step);
             FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(masks[0])
-            DIRECT_MULTIDIM_ELEM(masks[i],n) = DIRECT_MULTIDIM_ELEM(masks[i],n) -
-                                               DIRECT_MULTIDIM_ELEM(masks[1],n);
-
-            wave_size -= 2*wave_size_step;
+                DIRECT_MULTIDIM_ELEM(masks[i],n) = DIRECT_MULTIDIM_ELEM(masks[i],n) -
+                                                   DIRECT_MULTIDIM_ELEM(masks[1],n);
 
             // if we want overlapping regions (rings)
-            // wave_size -= wave_size_step;
+            wave_size -= wave_size_step;
+            // wave_size -= 2*wave_size_step;
         }
     }
 
     for (int i=2; i<(sizeof(masks)/sizeof(*masks)); i++)
     {
-        computeStats_within_binary_mask(masks[i], Iref(), min, max, avg, stddev);
-        feature_vector.push_back(avg);
-        feature_vector.push_back(stddev);
+        // HAAR-LIKE FEATURES
+        //computeStats_within_binary_mask(masks[i], Iref(), min, max, avg, stddev);
+        //feature_vector.push_back(avg);
+        //feature_vector.push_back(stddev);
+
+        // RANDOM VALUES
+        // feature_vector.push_back((rand()%1000)/1000);
+        // feature_vector.push_back((rand()%1000)/1000);
     }
 
     return feature_vector;
@@ -473,13 +500,14 @@ void ProgClassifyFast2D::run()
 {
     // Read the input metadata
     SF.read(fnSel);
-    FileName fnImg;
+    FileName fnImg, fnClass, fnTemp;
     int itemId = 0;
     MDRow row;
     MetaData MDsummary, MDclass;
     std::vector<double> fv;
     std::vector<Point> points;
     std::vector<Cluster> clusters;
+    srand (time(NULL));
 
     FOR_ALL_OBJECTS_IN_METADATA(SF)
     {
@@ -498,15 +526,32 @@ void ProgClassifyFast2D::run()
     std::size_t extraPath = fnOut.find_last_of("/");
     KMeans kmeans(K, itemId, fv.size(), 100);
     clusters = kmeans.run(points, fnOut.substr(0,extraPath+1) + fnClusters);
+    fnTemp = fnOut.substr(0,extraPath+1) + "temp.xmd";
 
-    // shows elements of clusters
+    std::ifstream f(fnOut.c_str());
+    if (f.good())
+        rename(fnOut.c_str(), fnTemp.c_str());
+
+    std::size_t classCount;
     for(int i = 0; i < K; i++)
     {
         int total_points_cluster =  clusters[i].getTotalPoints();
+        int old_points_cluster;
 
         size_t ii = MDsummary.addObject();
         MDsummary.setValue(MDL_REF, i+1, ii);
-        MDsummary.setValue(MDL_CLASS_COUNT, (size_t) total_points_cluster, ii);
+
+        std::ifstream f(fnTemp.c_str());
+        if (f.good())
+        {
+            fnClass=formatString("classes@%s", fnTemp.c_str());
+            MDclass.read(fnClass);
+            MDclass.getRow(row, i+1);
+            row.getValue(MDL_CLASS_COUNT, classCount);
+            MDsummary.setValue(MDL_CLASS_COUNT, (size_t) total_points_cluster+classCount, ii);
+        }
+        else
+            MDsummary.setValue(MDL_CLASS_COUNT, (size_t) total_points_cluster, ii);
 
         std::ostringstream clusterValues;
         clusterValues << "[";
@@ -518,11 +563,18 @@ void ProgClassifyFast2D::run()
         MDsummary.write(formatString("classes@%s", fnOut.c_str()), MD_APPEND);
         MDclass.clear();
 
+        if (f.good())
+        {
+            fnClass=formatString("class%06d_images@%s", i+1, fnTemp.c_str());
+            MDclass.read(fnClass);
+        }
+
+        size_t micrographId;
         for(int j = 0; j < total_points_cluster; j++)
         {
             SF.getRow(row, clusters[i].getPoint(j).getID());
-            MDclass.addRow(row);
-            MDclass.setValue(MDL_REF, i+1, j+1);
+            size_t recId = MDclass.addRow(row);
+            MDclass.setValue(MDL_REF, i+1, recId);
             MDclass.write(formatString("class%06d_images@%s", i+1, fnOut.c_str()), MD_APPEND);
         }
     }
