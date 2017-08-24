@@ -29,6 +29,8 @@
 #include <data/mask.h>
 #include <data/filters.h>
 #include <vector>
+#include <set>
+#include <utility>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -327,40 +329,40 @@ public:
 		}
 
         // TO REMOVE OUTLIERS
-        double dist, sum, stddev;
-        std::vector<double> cluster_point_dist;
-        for(int i = 0; i < K; i++)
-		{
-		    dist = 0.0;
-		    int points_orig_total = clusters[i].getTotalPoints();
-
-            for(int p = 0; p < points_orig_total; p++)
-            {
-                sum = 0.0;
-                for(int j = 0; j < total_values; j++)
-                {
-                    sum += pow(clusters[i].getCentralValue(j) -
-                               clusters[i].getPoint(p).getValue(j), 2.0);
-                }
-                cluster_point_dist.push_back(sqrt(sum));
-                dist += sqrt(sum)/points_orig_total;
-			}
-
-			for(int p = 0; p < points_orig_total; p++)
-            {
-                stddev += pow(cluster_point_dist[p] - dist, 2.0);
-			}
-			stddev = sqrt(stddev / points_orig_total);
-
-            int pp = 0;
-			for(int p = 0; p < points_orig_total; p++)
-            {
-                // Swich this condition for displaying eliminated particles
-                if ((cluster_point_dist[p] > (dist + 1.5*stddev)) || (cluster_point_dist[p] < (dist - 1.5*stddev)))
-                    clusters[i].removePoint(clusters[i].getPoint(pp).getID());
-                else pp++;
-			}
-        }
+//        double dist, sum, stddev;
+//        std::vector<double> cluster_point_dist;
+//        for(int i = 0; i < K; i++)
+//		{
+//		    dist = 0.0;
+//		    int points_orig_total = clusters[i].getTotalPoints();
+//
+//            for(int p = 0; p < points_orig_total; p++)
+//            {
+//                sum = 0.0;
+//                for(int j = 0; j < total_values; j++)
+//                {
+//                    sum += pow(clusters[i].getCentralValue(j) -
+//                               clusters[i].getPoint(p).getValue(j), 2.0);
+//                }
+//                cluster_point_dist.push_back(sqrt(sum));
+//                dist += sqrt(sum)/points_orig_total;
+//			}
+//
+//			for(int p = 0; p < points_orig_total; p++)
+//            {
+//                stddev += pow(cluster_point_dist[p] - dist, 2.0);
+//			}
+//			stddev = sqrt(stddev / points_orig_total);
+//
+//            int pp = 0;
+//			for(int p = 0; p < points_orig_total; p++)
+//            {
+//                // Swich this condition for displaying eliminated particles
+//                if ((cluster_point_dist[p] > (dist + 1.5*stddev)) || (cluster_point_dist[p] < (dist - 1.5*stddev)))
+//                    clusters[i].removePoint(clusters[i].getPoint(pp).getID());
+//                else pp++;
+//			}
+//        }
 
 
         std::ofstream saveClusters;
@@ -380,59 +382,182 @@ public:
 	}
 };
 
+bool ProgClassifyFast2D::isParticle(size_t id)
+{
+//    // Creating histogram
+//    int hist[256] = {};
+//    int threshold = 0;
+//    FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref())
+//    {
+//        int val = floor(((DIRECT_MULTIDIM_ELEM(Iref(),n) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
+//        hist[val]++;
+//    }
+//
+//    // Otsu thresholding
+//    double sum1 = 0;
+//    for (int i=1; i<=256; i++)
+//        sum1 += i * hist[i-1];
+//
+//    double wB = 0, sumB = 0, maximum = 0, mF, wF, between;
+//    for (int i=1; i<=256; i++)
+//    {
+//        wB += hist[i-1];
+//        wF = XSIZE(Iref())*YSIZE(Iref()) - wB;
+//        if (wB == 0 || wF == 0) continue;
+//        sumB += i * hist[i-1];
+//        mF = (sum1 - sumB) / wF;
+//        between = wB * wF * ((sumB / wB) - mF) * ((sumB / wB) - mF);
+//        if (between >= maximum)
+//        {
+//            threshold = i;
+//            maximum = between;
+//        }
+//    }
+//
+//    // Segmenting input image based on Otsu threshold
+//    Image<double> Iref_seg = Iref;
+//    FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref_seg())
+//    {
+//        if (floor(((DIRECT_MULTIDIM_ELEM(Iref(),n) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin())) > threshold)
+//            DIRECT_MULTIDIM_ELEM(Iref_seg(),n) = 1;
+//        else
+//            DIRECT_MULTIDIM_ELEM(Iref_seg(),n) = 0;
+//    }
+
+
+    int count = XSIZE(Iref()) * YSIZE(Iref()) / 50;
+    int hist[256] = {};
+    int low_thresh_val, high_thresh_val;
+    int low_thresh_cnt = 0, high_thresh_cnt = 0;
+    typedef std::pair<int, int> pairs;
+    std::set<pairs> low_inten_pts, high_inten_pts;
+
+    FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(Iref())
+    {
+        int val = floor(((DIRECT_A2D_ELEM(Iref(),i,j) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
+        hist[val]++;
+    }
+
+    for (low_thresh_val = 0; low_thresh_cnt < count; low_thresh_val++) low_thresh_cnt += hist[low_thresh_val];
+    for (high_thresh_val = 255; high_thresh_cnt < count; high_thresh_val--) high_thresh_cnt += hist[high_thresh_val];
+
+    FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(Iref())
+    {
+        int val = floor(((DIRECT_A2D_ELEM(Iref(),i,j) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
+        if (val < low_thresh_val)
+        {
+            low_inten_pts.insert(std::make_pair(i,j));
+        }
+        else if (val > high_thresh_val)
+        {
+            high_inten_pts.insert(std::make_pair(i,j));
+        }
+    }
+
+    double dist_high = 0.0, dist_low = 0.0;
+    int comparisons = 0;
+
+    for (std::set<pairs>:: iterator it1=high_inten_pts.begin(); it1!=--high_inten_pts.end(); ++it1)
+    {
+        pairs tmp1 = *it1;
+        for (std::set<pairs>::iterator it2=++it1; it2!=high_inten_pts.end(); ++it2)
+        {
+            pairs tmp2 = *it2;
+            dist_high += sqrt(((tmp1.first - tmp2.first) * (tmp1.first - tmp2.first)) + ((tmp1.second - tmp2.second) * (tmp1.second - tmp2.second)));
+            comparisons++;
+        }
+        --it1;
+    }
+    dist_high = dist_high / comparisons;
+
+    comparisons = 0;
+    for (std::set<pairs>:: iterator it1=low_inten_pts.begin(); it1!=--low_inten_pts.end(); ++it1)
+    {
+        pairs tmp1 = *it1;
+        for (std::set<pairs>::iterator it2=++it1; it2!=low_inten_pts.end(); ++it2)
+        {
+            pairs tmp2 = *it2;
+            dist_low += sqrt(((tmp1.first - tmp2.first) * (tmp1.first - tmp2.first)) + ((tmp1.second - tmp2.second) * (tmp1.second - tmp2.second)));
+            comparisons++;
+        }
+        --it1;
+    }
+    dist_low = dist_low / comparisons;
+
+    std::cout << " " << dist_low/dist_high << '\n';
+
+    return true;
+}
+
 
 std::vector<double> ProgClassifyFast2D::feature_extraction()
 {
     double avg, stddev, min, max;
     std::vector<double> feature_vector;
+    std::vector<double> min_idxs, min_idxs_sort;
 
     // LBP
-    unsigned char code;
-    double center;
-    int lbp_hist[256] = {};
-    for (int y=1; y<(YSIZE(Iref())-1); y++)
-    {
-        for (int x=1; x<(XSIZE(Iref())-1); x++)
-        {
-            code = 0;
-            center = DIRECT_A2D_ELEM(Iref(),y,x);
-            code |= (DIRECT_A2D_ELEM(Iref(),y-1,x-1) > center) << 7;
-            code |= (DIRECT_A2D_ELEM(Iref(),y-1,x  ) > center) << 6;
-            code |= (DIRECT_A2D_ELEM(Iref(),y-1,x+1) > center) << 5;
-            code |= (DIRECT_A2D_ELEM(Iref(),y,  x+1) > center) << 4;
-            code |= (DIRECT_A2D_ELEM(Iref(),y+1,x+1) > center) << 3;
-            code |= (DIRECT_A2D_ELEM(Iref(),y+1,x  ) > center) << 2;
-            code |= (DIRECT_A2D_ELEM(Iref(),y+1,x-1) > center) << 1;
-            code |= (DIRECT_A2D_ELEM(Iref(),y  ,x-1) > center) << 0;
-            int code_min = (int) code;
-            for (int i=0; i<7; i++)
-            {
-                unsigned char c = code & 1;  // extract the low bit
-                code >>= 1;  // shift right
-                code |= (c << 7);  // put the previous low bit in the high bit
-                if ((int) code < code_min)
-                    code_min = (int) code;
-            }
-            lbp_hist[code_min]++;
-        }
-    }
+//    unsigned char code;
+//    double center;
+//    int lbp_hist[256] = {};
+//
+//    for (int i=0; i<256; i++)
+//    {
+//        code = i;
+//        int code_min = (int) code;
+//        for (int ii=0; ii<7; ii++)
+//        {
+//            unsigned char c = code & 1;
+//            code >>= 1;
+//            code |= (c << 7);
+//            if ((int) code < code_min)
+//                code_min = (int) code;
+//        }
+//        min_idxs.push_back(code_min);
+//    }
+//    min_idxs_sort = min_idxs;
+//    std::sort(min_idxs_sort.begin(), min_idxs_sort.end());
+//    std::unique(min_idxs_sort.begin(), min_idxs_sort.end());
+//
+//    for (int y=1; y<(YSIZE(Iref())-1); y++)
+//    {
+//        for (int x=1; x<(XSIZE(Iref())-1); x++)
+//        {
+//            code = 0;
+//            center = DIRECT_A2D_ELEM(Iref(),y,x);
+//            code |= (DIRECT_A2D_ELEM(Iref(),y-1,x-1) > center) << 7;
+//            code |= (DIRECT_A2D_ELEM(Iref(),y-1,x  ) > center) << 6;
+//            code |= (DIRECT_A2D_ELEM(Iref(),y-1,x+1) > center) << 5;
+//            code |= (DIRECT_A2D_ELEM(Iref(),y,  x+1) > center) << 4;
+//            code |= (DIRECT_A2D_ELEM(Iref(),y+1,x+1) > center) << 3;
+//            code |= (DIRECT_A2D_ELEM(Iref(),y+1,x  ) > center) << 2;
+//            code |= (DIRECT_A2D_ELEM(Iref(),y+1,x-1) > center) << 1;
+//            code |= (DIRECT_A2D_ELEM(Iref(),y  ,x-1) > center) << 0;
+//            int idx = min_idxs[(int) code];
+//            lbp_hist[idx]++;
+//        }
+//    }
 
-    for (int i=0; i<256; i++)
-        feature_vector.push_back(lbp_hist[i]);
+//    for (int i=0; i<36; i++)
+//    {
+//        int idx = min_idxs_sort[i];
+//        feature_vector.push_back(lbp_hist[idx]);
+//    }
+
 
     // ENTROPY
-/*    int hist[256] = {};
+    int hist[256] = {};
     FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref())
     {
-        int idx = floor(((DIRECT_MULTIDIM_ELEM(Iref(),n) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
-        hist[idx]++;
+        int val = floor(((DIRECT_MULTIDIM_ELEM(Iref(),n) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
+        hist[val]++;
     }
     double entropy = 0;
     for (int i=0; i<256; i++)
     {
         entropy += std::max(hist[i], 1) * log2((std::max(hist[i], 1)));
     }
-    feature_vector.push_back(entropy);*/
+    feature_vector.push_back(entropy);
 
 
     if (XSIZE(masks[0]) < 1)
@@ -483,6 +608,22 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
 
     for (int i=2; i<(sizeof(masks)/sizeof(*masks)); i++)
     {
+        // ENTROPY
+        Image<double> Iref_masked;
+        apply_binary_mask(masks[i], Iref(), Iref_masked());
+        int hist[256] = {};
+        FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref_masked())
+        {
+            int idx = floor(((DIRECT_MULTIDIM_ELEM(Iref_masked(),n) - Iref_masked().computeMin()) * 255.0) / (Iref_masked().computeMax() - Iref_masked().computeMin()));
+            hist[idx]++;
+        }
+        double entropy = 0;
+        for (int i=0; i<256; i++)
+        {
+            entropy += std::max(hist[i], 1) * log2((std::max(hist[i], 1)));
+        }
+        feature_vector.push_back(entropy);
+
         // HAAR-LIKE FEATURES
         //computeStats_within_binary_mask(masks[i], Iref(), min, max, avg, stddev);
         //feature_vector.push_back(avg);
@@ -511,16 +652,19 @@ void ProgClassifyFast2D::run()
 
     FOR_ALL_OBJECTS_IN_METADATA(SF)
     {
-        itemId++;
     	SF.getValue(MDL_IMAGE, fnImg,__iter.objId);
     	Iref.read(fnImg);
     	Iref().setXmippOrigin();
     	CorrelationAux aux;
     	centerImageTranslationally(Iref(), aux);
 
-        fv = feature_extraction();
-        Point p(itemId, fv);
-        points.push_back(p);
+        if (isParticle(__iter.objId))
+        {
+            itemId++;
+            fv = feature_extraction();
+            Point p(itemId, fv);
+            points.push_back(p);
+        }
     }
 
     std::size_t extraPath = fnOut.find_last_of("/");

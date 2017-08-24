@@ -70,6 +70,9 @@ public:
     /// Define parameters
     void defineParams();
 
+    /// To eliminate outliers
+    bool isParticle(size_t id);
+
     /// Extracting features
     std::vector<double> feature_extraction();
 
