@@ -29,6 +29,7 @@
 #include <data/mask.h>
 #include <data/filters.h>
 #include <vector>
+#include <numeric>
 #include <set>
 #include <utility>
 #include <iostream>
@@ -425,68 +426,113 @@ bool ProgClassifyFast2D::isParticle(size_t id)
 //    }
 
 
-    int count = XSIZE(Iref()) * YSIZE(Iref()) / 50;
-    int hist[256] = {};
-    int low_thresh_val, high_thresh_val;
-    int low_thresh_cnt = 0, high_thresh_cnt = 0;
-    typedef std::pair<int, int> pairs;
-    std::set<pairs> low_inten_pts, high_inten_pts;
+//    int count = XSIZE(Iref()) * YSIZE(Iref()) / 50;
+//    int hist[256] = {};
+//    int low_thresh_val, high_thresh_val;
+//    int low_thresh_cnt = 0, high_thresh_cnt = 0;
+//    typedef std::pair<int, int> pairs;
+//    std::set<pairs> low_inten_pts, high_inten_pts;
+//
+//    FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(Iref())
+//    {
+//        int val = floor(((DIRECT_A2D_ELEM(Iref(),i,j) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
+//        hist[val]++;
+//    }
+//
+//    for (low_thresh_val = 0; low_thresh_cnt < count; low_thresh_val++) low_thresh_cnt += hist[low_thresh_val];
+//    for (high_thresh_val = 255; high_thresh_cnt < count; high_thresh_val--) high_thresh_cnt += hist[high_thresh_val];
+//
+//    FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(Iref())
+//    {
+//        int val = floor(((DIRECT_A2D_ELEM(Iref(),i,j) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
+//        if (val < low_thresh_val)
+//        {
+//            low_inten_pts.insert(std::make_pair(i,j));
+//        }
+//        else if (val > high_thresh_val)
+//        {
+//            high_inten_pts.insert(std::make_pair(i,j));
+//        }
+//    }
+//
+//    double dist_high = 0.0, dist_low = 0.0;
+//    int comparisons = 0;
+//
+//    for (std::set<pairs>:: iterator it1=high_inten_pts.begin(); it1!=--high_inten_pts.end(); ++it1)
+//    {
+//        pairs tmp1 = *it1;
+//        for (std::set<pairs>::iterator it2=++it1; it2!=high_inten_pts.end(); ++it2)
+//        {
+//            pairs tmp2 = *it2;
+//            dist_high += sqrt(((tmp1.first - tmp2.first) * (tmp1.first - tmp2.first)) + ((tmp1.second - tmp2.second) * (tmp1.second - tmp2.second)));
+//            comparisons++;
+//        }
+//        --it1;
+//    }
+//    dist_high = dist_high / comparisons;
+//
+//    comparisons = 0;
+//    for (std::set<pairs>:: iterator it1=low_inten_pts.begin(); it1!=--low_inten_pts.end(); ++it1)
+//    {
+//        pairs tmp1 = *it1;
+//        for (std::set<pairs>::iterator it2=++it1; it2!=low_inten_pts.end(); ++it2)
+//        {
+//            pairs tmp2 = *it2;
+//            dist_low += sqrt(((tmp1.first - tmp2.first) * (tmp1.first - tmp2.first)) + ((tmp1.second - tmp2.second) * (tmp1.second - tmp2.second)));
+//            comparisons++;
+//        }
+//        --it1;
+//    }
+//    dist_low = dist_low / comparisons;
 
-    FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(Iref())
+    std::vector<double> vars;
+    double mean_all = 0.0;
+    for (int yy = 1; yy <= 4; yy++)
     {
-        int val = floor(((DIRECT_A2D_ELEM(Iref(),i,j) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
-        hist[val]++;
+        int y_max = YSIZE(Iref()) / 4 * yy;
+        int y_min = YSIZE(Iref()) / 4 * (yy-1);
+        for (int xx = 1; xx <= 4; xx++)
+        {
+            int x_max = XSIZE(Iref()) / 4 * xx;
+            int x_min = XSIZE(Iref()) / 4 * (xx-1);
+
+            double mean = 0.0;
+            double var = 0.0;
+            int count = 0;
+            for (int y = y_min; y < y_max; y++)
+            {
+                for (int x = x_min; x < x_max; x++)
+                {
+                    mean += DIRECT_A2D_ELEM(Iref(),y,x);
+                    count++;
+                }
+            }
+            mean = mean / count;
+            for (int y = y_min; y < y_max; y++)
+            {
+                for (int x = x_min; x < x_max; x++)
+                {
+                    var += (DIRECT_A2D_ELEM(Iref(),y,x) - mean) * (DIRECT_A2D_ELEM(Iref(),y,x) - mean);
+                }
+            }
+            vars.push_back(var / count);
+            mean_all += mean;
+        }
     }
 
-    for (low_thresh_val = 0; low_thresh_cnt < count; low_thresh_val++) low_thresh_cnt += hist[low_thresh_val];
-    for (high_thresh_val = 255; high_thresh_cnt < count; high_thresh_val--) high_thresh_cnt += hist[high_thresh_val];
+    //double var_all = 0.0;
+    //FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(Iref())
+    //    var_all += (DIRECT_A2D_ELEM(Iref(),i,j) - mean_all) * (DIRECT_A2D_ELEM(Iref(),i,j) - mean_all);
+    //var_all = var_all / (XSIZE(Iref()) * YSIZE(Iref()));
 
-    FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(Iref())
-    {
-        int val = floor(((DIRECT_A2D_ELEM(Iref(),i,j) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
-        if (val < low_thresh_val)
-        {
-            low_inten_pts.insert(std::make_pair(i,j));
-        }
-        else if (val > high_thresh_val)
-        {
-            high_inten_pts.insert(std::make_pair(i,j));
-        }
-    }
+    //double average = std::accumulate(vars.begin(), vars.end(), 0.0) / vars.size();
+    //double variance = 0.0;
+    //for (int i = 0; i < vars.size(); i++)
+	//    variance += (vars[i] - average) * (vars[i] - average);
 
-    double dist_high = 0.0, dist_low = 0.0;
-    int comparisons = 0;
-
-    for (std::set<pairs>:: iterator it1=high_inten_pts.begin(); it1!=--high_inten_pts.end(); ++it1)
-    {
-        pairs tmp1 = *it1;
-        for (std::set<pairs>::iterator it2=++it1; it2!=high_inten_pts.end(); ++it2)
-        {
-            pairs tmp2 = *it2;
-            dist_high += sqrt(((tmp1.first - tmp2.first) * (tmp1.first - tmp2.first)) + ((tmp1.second - tmp2.second) * (tmp1.second - tmp2.second)));
-            comparisons++;
-        }
-        --it1;
-    }
-    dist_high = dist_high / comparisons;
-
-    comparisons = 0;
-    for (std::set<pairs>:: iterator it1=low_inten_pts.begin(); it1!=--low_inten_pts.end(); ++it1)
-    {
-        pairs tmp1 = *it1;
-        for (std::set<pairs>::iterator it2=++it1; it2!=low_inten_pts.end(); ++it2)
-        {
-            pairs tmp2 = *it2;
-            dist_low += sqrt(((tmp1.first - tmp2.first) * (tmp1.first - tmp2.first)) + ((tmp1.second - tmp2.second) * (tmp1.second - tmp2.second)));
-            comparisons++;
-        }
-        --it1;
-    }
-    dist_low = dist_low / comparisons;
-
-    std::cout << " " << dist_low/dist_high << '\n';
-
-    return true;
+    std::cout << variance / vars.size() << std::endl;
+    if (variance / vars.size() < 1) return true;
+    else return false;
 }
 
 
@@ -600,9 +646,9 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
                 DIRECT_MULTIDIM_ELEM(masks[i],n) = DIRECT_MULTIDIM_ELEM(masks[i],n) -
                                                    DIRECT_MULTIDIM_ELEM(masks[1],n);
 
-            // if we want overlapping regions (rings)
-            wave_size -= wave_size_step;
-            // wave_size -= 2*wave_size_step;
+
+            wave_size -= wave_size_step;     // overlapping regions (rings)
+            //wave_size -= 2*wave_size_step;   // non-overlapping regions (rings)
         }
     }
 
@@ -642,7 +688,7 @@ void ProgClassifyFast2D::run()
     // Read the input metadata
     SF.read(fnSel);
     FileName fnImg, fnClass, fnTemp;
-    int itemId = 0;
+    int itemId = 0, countItems = 0;
     MDRow row;
     MetaData MDsummary, MDclass;
     std::vector<double> fv;
@@ -652,6 +698,7 @@ void ProgClassifyFast2D::run()
 
     FOR_ALL_OBJECTS_IN_METADATA(SF)
     {
+        countItems++;
     	SF.getValue(MDL_IMAGE, fnImg,__iter.objId);
     	Iref.read(fnImg);
     	Iref().setXmippOrigin();
@@ -662,7 +709,7 @@ void ProgClassifyFast2D::run()
         {
             itemId++;
             fv = feature_extraction();
-            Point p(itemId, fv);
+            Point p(countItems, fv);
             points.push_back(p);
         }
     }
@@ -713,7 +760,6 @@ void ProgClassifyFast2D::run()
             MDclass.read(fnClass);
         }
 
-        size_t micrographId;
         for(int j = 0; j < total_points_cluster; j++)
         {
             SF.getRow(row, clusters[i].getPoint(j).getID());
