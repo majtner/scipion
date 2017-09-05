@@ -318,7 +318,7 @@ public:
 					{
 						for(int p = 0; p < total_points_cluster; p++)
 							sum += clusters[i].getPoint(p).getValue(j);
-						clusters[i].setCentralValue(j, sum / total_points_cluster);
+						clusters[i].setCentralValue(j, sum/total_points_cluster);
 					}
 				}
 			}
@@ -512,7 +512,8 @@ bool ProgClassifyFast2D::isParticle(size_t id)
             {
                 for (int x = x_min; x < x_max; x++)
                 {
-                    var += (DIRECT_A2D_ELEM(Iref(),y,x) - mean) * (DIRECT_A2D_ELEM(Iref(),y,x) - mean);
+                    var += (DIRECT_A2D_ELEM(Iref(),y,x) - mean) *
+                           (DIRECT_A2D_ELEM(Iref(),y,x) - mean);
                 }
             }
             vars.push_back(var / count);
@@ -525,12 +526,11 @@ bool ProgClassifyFast2D::isParticle(size_t id)
     //    var_all += (DIRECT_A2D_ELEM(Iref(),i,j) - mean_all) * (DIRECT_A2D_ELEM(Iref(),i,j) - mean_all);
     //var_all = var_all / (XSIZE(Iref()) * YSIZE(Iref()));
 
-    //double average = std::accumulate(vars.begin(), vars.end(), 0.0) / vars.size();
-    //double variance = 0.0;
-    //for (int i = 0; i < vars.size(); i++)
-	//    variance += (vars[i] - average) * (vars[i] - average);
+    double average = std::accumulate(vars.begin(), vars.end(), 0.0)/vars.size();
+    double variance = 0.0;
+    for (int i = 0; i < vars.size(); i++)
+	    variance += (vars[i] - average) * (vars[i] - average);
 
-    std::cout << variance / vars.size() << std::endl;
     if (variance / vars.size() < 1) return true;
     else return false;
 }
@@ -593,13 +593,16 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
 
     // ENTROPY
     int hist[256] = {};
+    int val;
     FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref())
     {
-        int val = floor(((DIRECT_MULTIDIM_ELEM(Iref(),n) - Iref().computeMin()) * 255.0) / (Iref().computeMax() - Iref().computeMin()));
+        val = floor(((DIRECT_MULTIDIM_ELEM(Iref(), n) -
+              Iref().computeMin()) * 255.0) /
+              (Iref().computeMax() - Iref().computeMin()));
         hist[val]++;
     }
     double entropy = 0;
-    for (int i=0; i<256; i++)
+    for (int i = 0; i < 256; i++)
     {
         entropy += std::max(hist[i], 1) * log2((std::max(hist[i], 1)));
     }
@@ -608,7 +611,7 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
 
     if (XSIZE(masks[0]) < 1)
     {
-        for (int i=0; i<(sizeof(masks)/sizeof(*masks)); i++)
+        for (int i = 0; i < (sizeof(masks)/sizeof(*masks)); i++)
         {
             masks[i].resize(Iref());
             masks[i].setXmippOrigin();
@@ -632,7 +635,7 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
 //            wave_size -= wave_size_step;
 //        }
 
-        for (int i=2; i<(sizeof(masks)/sizeof(*masks)); i++)
+        for (int i = 2; i < (sizeof(masks)/sizeof(*masks)); i++)
         {
             BinaryCircularMask(masks[0], wave_size);
             BinaryCircularMask(masks[1], wave_size - wave_size_step);
@@ -652,22 +655,25 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
         }
     }
 
-    for (int i=2; i<(sizeof(masks)/sizeof(*masks)); i++)
+    for (int i = 2; i < (sizeof(masks)/sizeof(*masks)); i++)
     {
         // ENTROPY
         Image<double> Iref_masked;
         apply_binary_mask(masks[i], Iref(), Iref_masked());
         int hist[256] = {};
+        int idx;
         FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref_masked())
         {
-            int idx = floor(((DIRECT_MULTIDIM_ELEM(Iref_masked(),n) - Iref_masked().computeMin()) * 255.0) / (Iref_masked().computeMax() - Iref_masked().computeMin()));
+            idx = floor(((DIRECT_MULTIDIM_ELEM(Iref_masked(), n) -
+                  Iref_masked().computeMin()) * 255.0) /
+                  (Iref_masked().computeMax() - Iref_masked().computeMin()));
             hist[idx]++;
         }
+
         double entropy = 0;
-        for (int i=0; i<256; i++)
-        {
+        for (int i = 0; i < 256; i++)
             entropy += std::max(hist[i], 1) * log2((std::max(hist[i], 1)));
-        }
+
         feature_vector.push_back(entropy);
 
         // HAAR-LIKE FEATURES
@@ -704,6 +710,7 @@ void ProgClassifyFast2D::run()
     	Iref().setXmippOrigin();
     	CorrelationAux aux;
     	centerImageTranslationally(Iref(), aux);
+    	denoiseTVFilter(Iref(), 50);
 
         if (isParticle(__iter.objId))
         {
@@ -739,18 +746,21 @@ void ProgClassifyFast2D::run()
             MDclass.read(fnClass);
             MDclass.getRow(row, i+1);
             row.getValue(MDL_CLASS_COUNT, classCount);
-            MDsummary.setValue(MDL_CLASS_COUNT, (size_t) total_points_cluster+classCount, ii);
+            MDsummary.setValue(MDL_CLASS_COUNT,
+                (size_t) total_points_cluster + classCount, ii);
         }
         else
-            MDsummary.setValue(MDL_CLASS_COUNT, (size_t) total_points_cluster, ii);
+            MDsummary.setValue(MDL_CLASS_COUNT,
+                (size_t) total_points_cluster, ii);
 
         std::ostringstream clusterValues;
         clusterValues << "[";
+
         for(int j = 0; j < fv.size()-1; j++)
             clusterValues << clusters[i].getCentralValue(j) << ", ";
+
         clusterValues << clusters[i].getCentralValue(fv.size()-1) << "]";
         MDsummary.setValue(MDL_FAST2D_CENTROID, clusterValues.str(), ii);
-
         MDsummary.write(formatString("classes@%s", fnOut.c_str()), MD_APPEND);
         MDclass.clear();
 
@@ -765,7 +775,8 @@ void ProgClassifyFast2D::run()
             SF.getRow(row, clusters[i].getPoint(j).getID());
             size_t recId = MDclass.addRow(row);
             MDclass.setValue(MDL_REF, i+1, recId);
-            MDclass.write(formatString("class%06d_images@%s", i+1, fnOut.c_str()), MD_APPEND);
+            MDclass.write(formatString("class%06d_images@%s",
+                i+1, fnOut.c_str()), MD_APPEND);
         }
     }
 }
