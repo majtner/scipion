@@ -73,6 +73,9 @@ public:
     /// To eliminate outliers
     bool isParticle(size_t id);
 
+    /// Function for factorial
+    int factorial(int n);
+
     /// Extracting features
     std::vector<double> feature_extraction();
 

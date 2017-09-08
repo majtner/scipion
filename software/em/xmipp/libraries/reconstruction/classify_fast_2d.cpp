@@ -28,6 +28,8 @@
 #include <data/xmipp_funcs.h>
 #include <data/mask.h>
 #include <data/filters.h>
+#include <math.h>
+#include <complex>
 #include <vector>
 #include <numeric>
 #include <set>
@@ -535,12 +537,65 @@ bool ProgClassifyFast2D::isParticle(size_t id)
     else return false;
 }
 
+int ProgClassifyFast2D::factorial(int n)
+{
+  return (n == 1 || n == 0) ? 1 : factorial(n - 1) * n;
+}
 
 std::vector<double> ProgClassifyFast2D::feature_extraction()
 {
     double avg, stddev, min, max;
     std::vector<double> feature_vector;
     std::vector<double> min_idxs, min_idxs_sort;
+
+    // ZERNIKE
+    MultidimArray<double> R, Theta, Rad;
+    R.resize(Iref()); R.setXmippOrigin();
+    Theta.resize(Iref()); Theta.setXmippOrigin();
+    Rad.resize(Iref()); Rad.setXmippOrigin();
+
+    double c;
+    int N = YSIZE(Iref());
+    const std::complex<double> i(0.0,1.0);
+
+    for (int n = 1; n < 5; n++)
+    {
+        for (int m = -n; m < 0; m+=2)
+        {
+            std::complex<double> product = 0.0;
+            for (int y = 0; y < YSIZE(Iref()); y++)
+            {
+                for (int x = 0; x < XSIZE(Iref()); x++)
+                {
+                    DIRECT_A2D_ELEM(R,y,x) =
+                        sqrt(pow(2*(x+1)-N-1,2.0) + pow(2*(y+1)-N-1,2.0)) / N;
+                    if (DIRECT_A2D_ELEM(R,y,x) > 1) DIRECT_A2D_ELEM(R,y,x) = 0;
+
+                    DIRECT_A2D_ELEM(Rad,y,x) = 0;
+                    for (int s = 0; s <=(n-abs(m))/2; s++)
+                    {
+                        c = pow(-1.0,s) * factorial(n-s) / (factorial(s) *
+                            factorial((n+abs(m))/2-s) *
+                            factorial((n-abs(m))/2-s));
+
+                        DIRECT_A2D_ELEM(Rad,y,x) = DIRECT_A2D_ELEM(Rad,y,x) +
+                            pow(c*DIRECT_A2D_ELEM(R,y,x), (n-2*s));
+                    }
+
+                    DIRECT_A2D_ELEM(Theta,y,x) = atan2((N-1-2*(y+1)+2),
+                                                       (2*(x+1)-N+1-2));
+
+                    product += DIRECT_A2D_ELEM(Iref(),y,x) *
+                               DIRECT_A2D_ELEM(Rad,y,x) *
+                               exp(-1.0 * i * (double)m *
+                                   DIRECT_A2D_ELEM(Theta,y,x));
+                }
+            }
+            //feature_vector.push_back(std::abs(product));
+            feature_vector.push_back((rand()%1000)/1000);
+        }
+    }
+
 
     // LBP
 //    unsigned char code;
@@ -591,100 +646,100 @@ std::vector<double> ProgClassifyFast2D::feature_extraction()
 //    }
 
 
-    // ENTROPY
-    int hist[256] = {};
-    int val;
-    FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref())
-    {
-        val = floor(((DIRECT_MULTIDIM_ELEM(Iref(), n) -
-              Iref().computeMin()) * 255.0) /
-              (Iref().computeMax() - Iref().computeMin()));
-        hist[val]++;
-    }
-    double entropy = 0;
-    for (int i = 0; i < 256; i++)
-    {
-        entropy += std::max(hist[i], 1) * log2((std::max(hist[i], 1)));
-    }
-    feature_vector.push_back(entropy);
-
-
-    if (XSIZE(masks[0]) < 1)
-    {
-        for (int i = 0; i < (sizeof(masks)/sizeof(*masks)); i++)
-        {
-            masks[i].resize(Iref());
-            masks[i].setXmippOrigin();
-        }
-
-        int wave_size = XSIZE(Iref()) / 2;
-        int wave_size_step = XSIZE(Iref()) / 32;
-
-//        for (int i=2; i<(sizeof(masks)/sizeof(*masks)); i++)
+//    // ENTROPY
+//    int hist[256] = {};
+//    int val;
+//    FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref())
+//    {
+//        val = floor(((DIRECT_MULTIDIM_ELEM(Iref(), n) -
+//              Iref().computeMin()) * 255.0) /
+//              (Iref().computeMax() - Iref().computeMin()));
+//        hist[val]++;
+//    }
+//    double entropy = 0;
+//    for (int i = 0; i < 256; i++)
+//    {
+//        entropy += std::max(hist[i], 1) * log2((std::max(hist[i], 1)));
+//    }
+//    feature_vector.push_back(entropy);
+//
+//
+//    if (XSIZE(masks[0]) < 1)
+//    {
+//        for (int i = 0; i < (sizeof(masks)/sizeof(*masks)); i++)
+//        {
+//            masks[i].resize(Iref());
+//            masks[i].setXmippOrigin();
+//        }
+//
+//        int wave_size = XSIZE(Iref()) / 2;
+//        int wave_size_step = XSIZE(Iref()) / 32;
+//
+////        for (int i=2; i<(sizeof(masks)/sizeof(*masks)); i++)
+////        {
+////            BinaryCircularMask(masks[0], wave_size);
+////            BinaryCircularMask(masks[1], wave_size - wave_size_step);
+////
+////            // if we want overlapping regions (rings)
+////            // BinaryCircularMask(masks[1], wave_size - 2*wave_size_step);
+////
+////            FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(masks[0])
+////                DIRECT_MULTIDIM_ELEM(masks[i],n) = DIRECT_MULTIDIM_ELEM(masks[0],n) -
+////                                                   DIRECT_MULTIDIM_ELEM(masks[1],n);
+////
+////            wave_size -= wave_size_step;
+////        }
+//
+//        for (int i = 2; i < (sizeof(masks)/sizeof(*masks)); i++)
 //        {
 //            BinaryCircularMask(masks[0], wave_size);
 //            BinaryCircularMask(masks[1], wave_size - wave_size_step);
 //
-//            // if we want overlapping regions (rings)
-//            // BinaryCircularMask(masks[1], wave_size - 2*wave_size_step);
-//
 //            FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(masks[0])
-//                DIRECT_MULTIDIM_ELEM(masks[i],n) = DIRECT_MULTIDIM_ELEM(masks[0],n) -
+//                DIRECT_MULTIDIM_ELEM(masks[i],n) = 2*DIRECT_MULTIDIM_ELEM(masks[1],n) -
+//                                                   DIRECT_MULTIDIM_ELEM(masks[0],n);
+//
+//            BinaryCircularMask(masks[1], wave_size - 2*wave_size_step);
+//            FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(masks[0])
+//                DIRECT_MULTIDIM_ELEM(masks[i],n) = DIRECT_MULTIDIM_ELEM(masks[i],n) -
 //                                                   DIRECT_MULTIDIM_ELEM(masks[1],n);
 //
-//            wave_size -= wave_size_step;
+//
+//            wave_size -= wave_size_step;     // overlapping regions (rings)
+//            //wave_size -= 2*wave_size_step;   // non-overlapping regions (rings)
 //        }
-
-        for (int i = 2; i < (sizeof(masks)/sizeof(*masks)); i++)
-        {
-            BinaryCircularMask(masks[0], wave_size);
-            BinaryCircularMask(masks[1], wave_size - wave_size_step);
-
-            FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(masks[0])
-                DIRECT_MULTIDIM_ELEM(masks[i],n) = 2*DIRECT_MULTIDIM_ELEM(masks[1],n) -
-                                                   DIRECT_MULTIDIM_ELEM(masks[0],n);
-
-            BinaryCircularMask(masks[1], wave_size - 2*wave_size_step);
-            FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(masks[0])
-                DIRECT_MULTIDIM_ELEM(masks[i],n) = DIRECT_MULTIDIM_ELEM(masks[i],n) -
-                                                   DIRECT_MULTIDIM_ELEM(masks[1],n);
-
-
-            wave_size -= wave_size_step;     // overlapping regions (rings)
-            //wave_size -= 2*wave_size_step;   // non-overlapping regions (rings)
-        }
-    }
-
-    for (int i = 2; i < (sizeof(masks)/sizeof(*masks)); i++)
-    {
-        // ENTROPY
-        Image<double> Iref_masked;
-        apply_binary_mask(masks[i], Iref(), Iref_masked());
-        int hist[256] = {};
-        int idx;
-        FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref_masked())
-        {
-            idx = floor(((DIRECT_MULTIDIM_ELEM(Iref_masked(), n) -
-                  Iref_masked().computeMin()) * 255.0) /
-                  (Iref_masked().computeMax() - Iref_masked().computeMin()));
-            hist[idx]++;
-        }
-
-        double entropy = 0;
-        for (int i = 0; i < 256; i++)
-            entropy += std::max(hist[i], 1) * log2((std::max(hist[i], 1)));
-
-        feature_vector.push_back(entropy);
-
-        // HAAR-LIKE FEATURES
-        //computeStats_within_binary_mask(masks[i], Iref(), min, max, avg, stddev);
-        //feature_vector.push_back(avg);
-        //feature_vector.push_back(stddev);
-
-        // RANDOM VALUES
-        // feature_vector.push_back((rand()%1000)/1000);
-        // feature_vector.push_back((rand()%1000)/1000);
-    }
+//    }
+//
+//    for (int i = 2; i < (sizeof(masks)/sizeof(*masks)); i++)
+//    {
+//        // ENTROPY
+//        Image<double> Iref_masked;
+//        apply_binary_mask(masks[i], Iref(), Iref_masked());
+//        int hist[256] = {};
+//        int idx;
+//        FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref_masked())
+//        {
+//            idx = floor(((DIRECT_MULTIDIM_ELEM(Iref_masked(), n) -
+//                  Iref_masked().computeMin()) * 255.0) /
+//                  (Iref_masked().computeMax() - Iref_masked().computeMin()));
+//            hist[idx]++;
+//        }
+//
+//        double entropy = 0;
+//        for (int i = 0; i < 256; i++)
+//            entropy += std::max(hist[i], 1) * log2((std::max(hist[i], 1)));
+//
+//        feature_vector.push_back(entropy);
+//
+//        // HAAR-LIKE FEATURES
+//        //computeStats_within_binary_mask(masks[i], Iref(), min, max, avg, stddev);
+//        //feature_vector.push_back(avg);
+//        //feature_vector.push_back(stddev);
+//
+//        // RANDOM VALUES
+//         feature_vector.push_back((rand()%1000)/1000);
+//         feature_vector.push_back((rand()%1000)/1000);
+//    }
 
     return feature_vector;
 }
