@@ -499,6 +499,7 @@ for p in ['angular_break_symmetry',
           'classify_compare_classes',
           'classify_evaluate_classes',
           'classify_fast_2d',
+          'classify_extract_features',
           'classify_first_split',
           'classify_kerdensom',
 			
