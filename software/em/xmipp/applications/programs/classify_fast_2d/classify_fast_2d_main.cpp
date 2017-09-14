@@ -25,13 +25,4 @@
 
 #include <reconstruction/classify_fast_2d.h>
 
-int main(int argc, char **argv)
-{
-    ProgClassifyFast2D prm;
-    prm.read(argc, argv);
-    return prm.tryRun();
-}
-
-
-
-
+RUN_XMIPP_PROGRAM(ProgClassifyFast2D)

@@ -25,15 +25,7 @@
 #ifndef _PROG_FAST2DCLUSTERING
 #define _PROG_FAST2DCLUSTERING
 
-#include <data/xmipp_fftw.h>
-#include <data/args.h>
-#include <data/xmipp_funcs.h>
-#include <data/metadata_extension.h>
-#include <data/metadata.h>
-#include <data/xmipp_image.h>
 #include <data/xmipp_program.h>
-#include <vector>
-
 
 class ProgClassifyFast2D: public XmippProgram
 {
@@ -50,15 +42,15 @@ public:
     /**  Number of clusters */
     int K;
 
-    /**  Masks for Haar features */
-    MultidimArray<int> masks[7];
-
 public:
     // SelFile with the input images
     MetaData SF;
 
     // Image holding current reference
     Image<double> Iref;
+
+    /**  Masks for Haar features */
+    MultidimArray<int> masks[7];
 
 public:
     /// Read argument

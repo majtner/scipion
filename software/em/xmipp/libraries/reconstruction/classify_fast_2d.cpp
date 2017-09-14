@@ -24,21 +24,8 @@
  ***************************************************************************/
 
 #include "classify_fast_2d.h"
-
-#include <data/xmipp_funcs.h>
-#include <data/mask.h>
 #include <data/filters.h>
-#include <math.h>
-#include <complex>
-#include <vector>
 #include <numeric>
-#include <set>
-#include <utility>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <algorithm>
 
 
 // Read arguments ==========================================================
