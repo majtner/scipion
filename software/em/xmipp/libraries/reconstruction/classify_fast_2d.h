@@ -42,6 +42,9 @@ public:
     /**  Number of clusters */
     int K;
 
+    /**  Maximum number of objects used for clustering */
+    int maxObjects;
+
 public:
     // SelFile with the input images
     MetaData SF;

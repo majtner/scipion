@@ -38,6 +38,7 @@ void ProgClassifyFast2D::readParams()
     fnOut = getParam("-o");
     K = getIntParam("-k");
     fnClusters = getParam("-c");
+    maxObjects = getIntParam("-m");
 }
 
 // Show ====================================================================
@@ -46,10 +47,11 @@ void ProgClassifyFast2D::show()
     if (verbose==0)
         return;
     std::cerr
-    << "Input selfile:           " << fnSel      << std::endl
-    << "Output selfile:          " << fnOut      << std::endl
-    << "Number of clusters:      " << K          << std::endl
-    << "Filename with clusters:  " << fnClusters << std::endl
+    << "Input selfile:                          " << fnSel      << std::endl
+    << "Output selfile:                         " << fnOut      << std::endl
+    << "Number of clusters:                     " << K          << std::endl
+    << "Filename with clusters:                 " << fnClusters << std::endl
+    << "Max. number of objects for clustering:  " << maxObjects << std::endl
     ;
 }
 
@@ -61,6 +63,7 @@ void ProgClassifyFast2D::defineParams()
     addParamsLine("  -o <selfile>                  : Output selfile");
     addParamsLine("  -k <int>                      : Number of clusters");
     addParamsLine("  [-c <image=\"clusters.xmd\">] : Filename with clusters");
+    addParamsLine("  [-m <int=\"0\">]              : Max. number of objects for clustering");
 }
 
 
@@ -186,7 +189,7 @@ class KMeans
 {
 private:
 	int K; // number of clusters
-	int total_values, total_points, max_iterations;
+	int total_values, total_points, maxIterations, maxObjects;
 	std::vector<Cluster> clusters;
 
 	// return ID of nearest center (uses euclidean distance)
@@ -227,12 +230,14 @@ private:
 	}
 
 public:
-	KMeans(int K, int total_points, int total_values, int max_iterations)
+	KMeans(int K, int total_points, int total_values, int maxIterations,
+	       int maxObjects)
 	{
 		this->K = K;
 		this->total_points = total_points;
 		this->total_values = total_values;
-		this->max_iterations = max_iterations;
+		this->maxIterations = maxIterations;
+		this->maxObjects = maxObjects;
 	}
 
 	std::vector<Cluster> run(std::vector<Point> & points, FileName fnClusters)
@@ -284,16 +289,16 @@ public:
 			// associates each point to the nearest center
 			for(int i = 0; i < total_points; i++)
 			{
-				int id_old_cluster = points[i].getCluster();
-				int id_nearest_center = getIDNearestCenter(points[i]);
+				int old_cluster = points[i].getCluster();
+				int nearest_center = getIDNearestCenter(points[i]);
 
-				if(id_old_cluster != id_nearest_center)
+				if(old_cluster != nearest_center)
 				{
-					if(id_old_cluster != -1)
-						clusters[id_old_cluster].removePoint(points[i].getID());
+					if(old_cluster != -1)
+						clusters[old_cluster].removePoint(points[i].getID());
 
-					points[i].setCluster(id_nearest_center);
-					clusters[id_nearest_center].addPoint(points[i]);
+					points[i].setCluster(nearest_center);
+					clusters[nearest_center].addPoint(points[i]);
 					done = false;
 				}
 			}
@@ -303,19 +308,19 @@ public:
 			{
 				for(int j = 0; j < total_values; j++)
 				{
-					int total_points_cluster = clusters[i].getTotalPoints();
+					int total_points = clusters[i].getTotalPoints();
 					double sum = 0.0;
 
-					if(total_points_cluster > 0)
+					if(total_points > 0)
 					{
-						for(int p = 0; p < total_points_cluster; p++)
+						for(int p = 0; p < total_points; p++)
 							sum += clusters[i].getPoint(p).getValue(j);
-						clusters[i].setCentralValue(j, sum/total_points_cluster);
+						clusters[i].setCentralValue(j, sum / total_points);
 					}
 				}
 			}
 
-			if(done == true || iter >= max_iterations)
+			if(done == true || iter >= maxIterations)
 				break;
 
 			iter++;
@@ -591,7 +596,7 @@ void ProgClassifyFast2D::run()
     }
 
     std::size_t extraPath = fnOut.find_last_of("/");
-    KMeans kmeans(K, itemId, fv.size(), 100);
+    KMeans kmeans(K, itemId, fv.size(), 100, maxObjects);
     clusters = kmeans.run(points, fnOut.substr(0, extraPath+1) + fnClusters);
     fnTemp = fnOut.substr(0, extraPath+1) + "temp.xmd";
 
