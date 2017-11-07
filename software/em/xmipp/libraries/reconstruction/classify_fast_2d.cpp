@@ -80,7 +80,7 @@ public:
 		this->id_point = id_point;
 		total_values = values.size();
 
-		for(int i = 0; i < total_values; i++)
+		for (int i = 0; i < total_values; i++)
 			this->values.push_back(values[i]);
 
 		id_cluster = -1;
@@ -132,7 +132,7 @@ public:
 
 		int total_values = point.getTotalValues();
 
-		for(int i = 0; i < total_values; i++)
+		for (int i = 0; i < total_values; i++)
 			central_values.push_back(point.getValue(i));
 
 		points.push_back(point);
@@ -147,7 +147,7 @@ public:
 	{
 		int total_points = points.size();
 
-		for(int i = 0; i < total_points; i++)
+		for (int i = 0; i < total_points; i++)
 		{
 			if(points[i].getID() == id_point)
 			{
@@ -198,7 +198,7 @@ private:
 		double sum = 0.0, min_dist;
 		int id_cluster_center = 0;
 
-		for(int i = 0; i < total_values; i++)
+		for (int i = 0; i < total_values; i++)
 		{
 			sum += pow(clusters[0].getCentralValue(i) -
 					   point.getValue(i), 2.0);
@@ -206,12 +206,12 @@ private:
 
 		min_dist = sqrt(sum);
 
-		for(int i = 1; i < K; i++)
+		for (int i = 1; i < K; i++)
 		{
 			double dist;
 			sum = 0.0;
 
-			for(int j = 0; j < total_values; j++)
+			for (int j = 0; j < total_values; j++)
 			{
 				sum += pow(clusters[i].getCentralValue(j) -
 						   point.getValue(j), 2.0);
@@ -219,7 +219,7 @@ private:
 
 			dist = sqrt(sum);
 
-			if(dist < min_dist)
+			if (dist < min_dist)
 			{
 				min_dist = dist;
 				id_cluster_center = i;
@@ -245,14 +245,14 @@ public:
         // choose K distinct points for the centers of the clusters
         std::vector<int> prohibited_indexes;
 
-        for(int i = 0; i < K; i++)
+        for (int i = 0; i < K; i++)
         {
-            while(true)
+            while (true)
             {
                 int index_point = rand() % total_points;
 
-                if(find(prohibited_indexes.begin(), prohibited_indexes.end(),
-                        index_point) == prohibited_indexes.end())
+                if (find(prohibited_indexes.begin(), prohibited_indexes.end(),
+                    index_point) == prohibited_indexes.end())
                 {
                     prohibited_indexes.push_back(index_point);
                     points[index_point].setCluster(i);
@@ -267,12 +267,12 @@ public:
         if (savedClusters.good())
         {
             std::string line;
-            for(int i = 0; i < K; i++)
+            for (int i = 0; i < K; i++)
             {
                 std::getline(savedClusters, line);
                 std::stringstream ss(line);
                 double point_value;
-                for(int j = 0; j < total_values; j++)
+                for (int j = 0; j < total_values; j++)
                 {
                     ss >> point_value;
                     clusters[i].setCentralValue(j, point_value);
@@ -281,20 +281,19 @@ public:
         }
 
 		int iter = 1;
-
 		while(true)
 		{
 			bool done = true;
 
 			// associates each point to the nearest center
-			for(int i = 0; i < total_points; i++)
+			for (int i = 0; i < total_points; i++)
 			{
 				int old_cluster = points[i].getCluster();
 				int nearest_center = getIDNearestCenter(points[i]);
 
-				if(old_cluster != nearest_center)
+				if (old_cluster != nearest_center)
 				{
-					if(old_cluster != -1)
+					if (old_cluster != -1)
 						clusters[old_cluster].removePoint(points[i].getID());
 
 					points[i].setCluster(nearest_center);
@@ -304,24 +303,22 @@ public:
 			}
 
 			// recalculating the center of each cluster
-			for(int i = 0; i < K; i++)
+			for (int i = 0; i < K; i++)
 			{
-				for(int j = 0; j < total_values; j++)
+				for (int j = 0; j < total_values; j++)
 				{
 					int total_points = clusters[i].getTotalPoints();
 					double sum = 0.0;
 
-					if(total_points > 0)
+					if (total_points > 0)
 					{
-						for(int p = 0; p < total_points; p++)
+						for (int p = 0; p < total_points; p++)
 							sum += clusters[i].getPoint(p).getValue(j);
 						clusters[i].setCentralValue(j, sum / total_points);
 					}
 				}
 			}
-
-			if(done == true || iter >= maxIterations)
-				break;
+			if (done == true || iter >= maxIterations) break;
 
 			iter++;
 		}
@@ -331,29 +328,29 @@ public:
         /*
         double dist, sum, stddev;
         std::vector<double> cluster_point_dist;
-        for(int i = 0; i < K; i++)
+        for (int i = 0; i < K; i++)
 		{
 		    dist = 0.0;
 		    int points_orig_total = clusters[i].getTotalPoints();
 
-            for(int p = 0; p < points_orig_total; p++)
+            for (int p = 0; p < points_orig_total; p++)
             {
                 sum = 0.0;
-                for(int j = 0; j < total_values; j++)
+                for (int j = 0; j < total_values; j++)
                     sum += pow(clusters[i].getCentralValue(j) -
-                               clusters[i].getPoint(p).getValue(j), 2.0);
+                           clusters[i].getPoint(p).getValue(j), 2.0);
 
                 cluster_point_dist.push_back(sqrt(sum));
                 dist += sqrt(sum) / points_orig_total;
 			}
 
-			for(int p = 0; p < points_orig_total; p++)
+			for (int p = 0; p < points_orig_total; p++)
                 stddev += pow(cluster_point_dist[p] - dist, 2.0);
 
 			stddev = sqrt(stddev / points_orig_total);
 
             int pp = 0;
-			for(int p = 0; p < points_orig_total; p++)
+			for (int p = 0; p < points_orig_total; p++)
             {
                 // Swich this condition for taking only eliminated particles
                 if ((cluster_point_dist[p] > (dist + 1.5*stddev)) ||
@@ -367,9 +364,9 @@ public:
         std::ofstream saveClusters;
         saveClusters.open(fnClusters.c_str());
 
-        for(int i = 0; i < K; i++)
+        for (int i = 0; i < K; i++)
         {
-            for(int j = 0; j < total_values; j++)
+            for (int j = 0; j < total_values; j++)
             {
                 saveClusters << clusters[i].getCentralValue(j) << " ";
             }
@@ -448,68 +445,21 @@ bool ProgClassifyFast2D::isParticle(size_t id)
     }
     dist_low = dist_low / comparisons;
 
-
-
-//    std::vector<double> vars;
-//    double mean_all = 0.0;
-//    for (int yy = 1; yy <= 4; yy++)
-//    {
-//        int y_max = YSIZE(Iref()) / 4 * yy;
-//        int y_min = YSIZE(Iref()) / 4 * (yy-1);
-//        for (int xx = 1; xx <= 4; xx++)
-//        {
-//            int x_max = XSIZE(Iref()) / 4 * xx;
-//            int x_min = XSIZE(Iref()) / 4 * (xx-1);
-//
-//            double mean = 0.0;
-//            double var = 0.0;
-//            int count = 0;
-//            for (int y = y_min; y < y_max; y++)
-//            {
-//                for (int x = x_min; x < x_max; x++)
-//                {
-//                    mean += DIRECT_A2D_ELEM(Iref(),y,x);
-//                    count++;
-//                }
-//            }
-//            mean = mean / count;
-//            for (int y = y_min; y < y_max; y++)
-//            {
-//                for (int x = x_min; x < x_max; x++)
-//                {
-//                    var += (DIRECT_A2D_ELEM(Iref(),y,x) - mean) *
-//                           (DIRECT_A2D_ELEM(Iref(),y,x) - mean);
-//                }
-//            }
-//            vars.push_back(var / count);
-//            mean_all += mean;
-//        }
-//    }
-//
-//    double var_all = 0.0;
-//    FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(Iref())
-//        var_all += (DIRECT_A2D_ELEM(Iref(),i,j) - mean_all) * (DIRECT_A2D_ELEM(Iref(),i,j) - mean_all);
-//    var_all = var_all / (XSIZE(Iref()) * YSIZE(Iref()));
-//
-//    double average = std::accumulate(vars.begin(), vars.end(), 0.0)/vars.size();
-//    double variance = 0.0;
-//    for (int i = 0; i < vars.size(); i++)
-//	    variance += (vars[i] - average) * (vars[i] - average);
-
     return true;
 }
 
 void ProgClassifyFast2D::run()
 {
+    MetaData SF;
     SF.read(fnSel);
     FileName fnImg, fnClass, fnTemp;
     int itemId = 0, countItems = 0;
     MDRow row;
     MetaData MDsummary, MDclass;
+    CorrelationAux aux;
     std::vector<double> fv;
     std::vector<Point> points;
     std::vector<Cluster> clusters;
-    srand (time(NULL));
     ProgExtractFeatures features;
 
     FOR_ALL_OBJECTS_IN_METADATA(SF)
@@ -518,78 +468,12 @@ void ProgClassifyFast2D::run()
     	SF.getValue(MDL_IMAGE, fnImg,__iter.objId);
     	Iref.read(fnImg);
     	Iref().setXmippOrigin();
-
-    	Image<double> granulo;
-        granulo().resizeNoCopy(Iref());
-
-        // GRANULO DESCRIPTOR
-        double m, M;
-        Iref().computeDoubleMinMax(m, M);
-
-        for (int N = 1; N < 5; N++)
-        {
-            int size = N*2 + 1;
-            bool struct_elem[size][size];
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                    struct_elem[x][y] = pow(x - N, 2.0) +
-                                        pow(y - N, 2.0) <=
-                                        pow(N, 2.0);
-            }
-
-            double sum = 0.0;
-            for (int y = 0; y < YSIZE(Iref()); y++)
-            {
-                for (int x = 0; x < XSIZE(Iref()); x++)
-                {
-                    double struct_min = M;
-                    for (int yy = y-N; yy <= y+N; yy++)
-                    {
-                        if (yy < 0 || yy >= YSIZE(Iref())) continue;
-                        for (int xx = x-N; xx <= x+N; xx++)
-                        {
-                            if (xx < 0 || xx >= XSIZE(Iref())) continue;
-                            if (struct_elem[xx+N-x][yy+N-y] &&
-                                DIRECT_A2D_ELEM(Iref(), yy, xx) < struct_min)
-                                struct_min = DIRECT_A2D_ELEM(Iref(), yy, xx);
-                        }
-                    }
-                    DIRECT_A2D_ELEM(granulo(),y,x) = struct_min;
-                }
-            }
-
-            for (int y = 0; y < YSIZE(Iref()); y++)
-            {
-                for (int x = 0; x < XSIZE(Iref()); x++)
-                {
-                    double struct_max = m;
-                    for (int yy = y-N; yy <= y+N; yy++)
-                    {
-                        if (yy < 0 || yy >= YSIZE(Iref())) continue;
-                        for (int xx = x-N; xx <= x+N; xx++)
-                        {
-                            if (xx < 0 || xx >= XSIZE(Iref())) continue;
-                            if (struct_elem[xx+N-x][yy+N-y] &&
-                                DIRECT_A2D_ELEM(granulo(), yy, xx) > struct_max)
-                                struct_max = DIRECT_A2D_ELEM(granulo(), yy, xx);
-                        }
-                    }
-                    sum += struct_max;
-                }
-            }
-            std::cout << sum << " ";
-        }
-        std::cout << std::endl;
-
-    	CorrelationAux aux;
     	centerImageTranslationally(Iref(), aux);
-    	denoiseTVFilter(Iref(), 50);
 
         if (isParticle(__iter.objId))
         {
             itemId++;
-            fv = features.extractLBP(Iref());
+            features.extractLBP(Iref(), fv);
             Point p(countItems, fv);
             points.push_back(p);
         }
@@ -605,9 +489,9 @@ void ProgClassifyFast2D::run()
         rename(fnOut.c_str(), fnTemp.c_str());
 
     std::size_t classCount;
-    for(int i = 0; i < K; i++)
+    for (int i = 0; i < K; i++)
     {
-        int total_points_cluster =  clusters[i].getTotalPoints();
+        int total_points_cluster = clusters[i].getTotalPoints();
         int old_points_cluster;
 
         size_t ii = MDsummary.addObject();
@@ -630,10 +514,11 @@ void ProgClassifyFast2D::run()
         std::ostringstream clusterValues;
         clusterValues << "[";
 
-        for(int j = 0; j < fv.size()-1; j++)
+        for (int j = 0; j < fv.size()-1; j++)
             clusterValues << clusters[i].getCentralValue(j) << ", ";
 
         clusterValues << clusters[i].getCentralValue(fv.size()-1) << "]";
+
         MDsummary.setValue(MDL_FAST2D_CENTROID, clusterValues.str(), ii);
         MDsummary.write(formatString("classes@%s", fnOut.c_str()), MD_APPEND);
         MDclass.clear();
@@ -644,7 +529,7 @@ void ProgClassifyFast2D::run()
             MDclass.read(fnClass);
         }
 
-        for(int j = 0; j < total_points_cluster; j++)
+        for (int j = 0; j < total_points_cluster; j++)
         {
             SF.getRow(row, clusters[i].getPoint(j).getID());
             size_t recId = MDclass.addRow(row);

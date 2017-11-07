@@ -46,9 +46,6 @@ public:
     int maxObjects;
 
 public:
-    // SelFile with the input images
-    MetaData SF;
-
     // Image holding current reference
     Image<double> Iref;
 
