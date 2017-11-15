@@ -25,7 +25,6 @@
 # *****************************************************************************
 
 import os
-from os.path import basename
 import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.constants as cons
@@ -33,7 +32,6 @@ import pyworkflow.protocol.params as param
 from pyworkflow.em.protocol import ProtClassify2D, SetOfClasses2D
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.object import Set
-from pyworkflow.utils import getExt, replaceExt
 from pyworkflow.utils.path import cleanPath
 from pyworkflow.utils.properties import Message
 from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
@@ -103,7 +101,6 @@ class XmippProtFastClassif2D(ProtClassify2D):
         stepId = \
             self._insertFunctionStep('fastClassifyStep',
                                      self._getExtraPath("newDone.xmd"),
-                                     self._getExtraPath("output.xmd"),
                                      prerequisites=[])
         deps.append(stepId)
         for part in inputParticles:
@@ -187,27 +184,26 @@ class XmippProtFastClassif2D(ProtClassify2D):
             # Persist changes
             self._store(outputAttr)
         else:
-            classes2DSet = self._createSetOfClasses2D(self.SetOfParticles)
-            self._fillClassesFromLevel(classes2DSet)
+            set2D = self._createSetOfClasses2D(self.inputParticles.get())
+            self._fillClassesFromLevel(set2D)
 
-            outputSet = {'outputClasses': classes2DSet}
+            outputSet = {'outputClasses': set2D}
             self._defineOutputs(**outputSet)
-            self._defineSourceRelation(self.inputParticles, classes2DSet)
+            self._defineSourceRelation(self.inputParticles, set2D)
 
-    def fastClassifyStep(self, fnInputMd, fnOutputMd):
+    def fastClassifyStep(self, fnInputMd):
         iteration=0
-        args = "-i %s -o %s -k %d" % (fnInputMd, fnOutputMd,
-                                      self.numberOfClasses.get())
+        args = "-i %s -k %d" % (fnInputMd, self.numberOfClasses.get())
         self.runJob("xmipp_classify_fast_2d", args)
         cleanPath(self._getExtraPath("level_00"))
-        blocks = md.getBlocksInMetaDataFile(fnOutputMd)
+        blocks = md.getBlocksInMetaDataFile(self._getExtraPath("output.xmd"))
         fnDir = self._getExtraPath()
         # Gather all images in block
         for b in blocks:
             if b.startswith('class0'):
                 args = "-i %s@%s --iter 5 --distance correlation " \
                        "--classicalMultiref --nref 1 --odir %s --oroot %s" % \
-                       (b, fnOutputMd, fnDir, b)
+                       (b, self._getExtraPath("output.xmd"), fnDir, b)
                 if iteration==0:
                     args += " --nref0 1"
                 else:
@@ -220,16 +216,6 @@ class XmippProtFastClassif2D(ProtClassify2D):
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
         outSet = self._loadOutputSet(SetOfClasses2D, 'classes2D.sqlite')
         self._updateOutputSet('outputParticles', outSet, streamMode)
-
-
-    # --------------------------- UTILS functions -----------------------------
-    def _defArgsClassify(self, inputPart, outputPart):
-        # Prepare arguments to call program: xmipp_classify_CL2D
-        args = "-i %s -o %s -k %d" % (inputPart, outputPart,
-                                      self.numberOfClasses.get())
-        if False:
-            args += ' -c %(nref0)s'
-        return args
 
     def _readDoneList(self):
         """ Read from a file the id's of the items that have been done. """
@@ -249,20 +235,6 @@ class XmippProtFastClassif2D(ProtClassify2D):
         with open(self._getAllDone(), 'a') as f:
             for part in partList:
                 f.write('%d\n' % part.getObjId())
-
-    def _isPartDone(self, part):
-        """ A particle is done if the marker file exists. """
-        return os.path.exists(self._getPartDone(part))
-
-    def _getPartDone(self, part):
-        fn = str(part.getObjId()) + "_" + part.getFileName()
-        extFn = getExt(fn)
-        if extFn != ".stk":
-            fn = replaceExt(fn, "stk")
-        return self._getExtraPath('%s' % basename(fn))
-
-
-    #--------------------------- UTILS functions ------------------------------
 
     def _updateParticle(self, item, row):
         item.setClassId(row.getValue(md.MDL_REF))
@@ -294,9 +266,10 @@ class XmippProtFastClassif2D(ProtClassify2D):
                 self._loadClassesInfo(
                     self._getExtraPath("level_00/%s_classes.stk" % b), bId)
                 xmpMd = b + "@" + self._getExtraPath('output.xmd')
-                iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
-                                            updateItemCallback=
+                iterator = md.SetMdIterator(xmpMd,
+                                            sortByLabel = md.MDL_ITEM_ID,
+                                            updateItemCallback =
                                             self._updateParticle,
-                                            skipDisabled=True)
-                clsSet.classifyItems(updateItemCallback=iterator.updateItem,
-                                     updateClassCallback=self._updateClass)
+                                            skipDisabled = True)
+                clsSet.classifyItems(updateItemCallback = iterator.updateItem,
+                                     updateClassCallback = self._updateClass)

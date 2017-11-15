@@ -38,6 +38,7 @@ void ProgClassifyFast2D::readParams()
     fnOut = getParam("-o");
     K = getIntParam("-k");
     fnClusters = getParam("-c");
+    fnPoints = getParam("-p");
     maxObjects = getIntParam("-m");
 }
 
@@ -51,6 +52,7 @@ void ProgClassifyFast2D::show()
     << "Output selfile:                         " << fnOut      << std::endl
     << "Number of clusters:                     " << K          << std::endl
     << "Filename with clusters:                 " << fnClusters << std::endl
+    << "Filename with points:                   " << fnPoints   << std::endl
     << "Max. number of objects for clustering:  " << maxObjects << std::endl
     ;
 }
@@ -60,9 +62,10 @@ void ProgClassifyFast2D::defineParams()
 {
     addUsageLine("Clusters a set of images");
     addParamsLine("  -i <selfile>                  : Selfile containing images to be clustered");
-    addParamsLine("  -o <selfile>                  : Output selfile");
+    addParamsLine("  [-o <image=\"output.xmd\">]   : Output selfile");
     addParamsLine("  -k <int>                      : Number of clusters");
     addParamsLine("  [-c <image=\"clusters.xmd\">] : Filename with clusters");
+    addParamsLine("  [-p <image=\"points.xmd\">]   : Filename with points");
     addParamsLine("  [-m <int=\"0\">]              : Max. number of objects for clustering");
 }
 
@@ -199,10 +202,8 @@ private:
 		int id_cluster_center = 0;
 
 		for (int i = 0; i < total_values; i++)
-		{
-			sum += pow(clusters[0].getCentralValue(i) -
-					   point.getValue(i), 2.0);
-		}
+			sum += ((clusters[0].getCentralValue(i) - point.getValue(i)) *
+			        (clusters[0].getCentralValue(i) - point.getValue(i)));
 
 		min_dist = sqrt(sum);
 
@@ -212,10 +213,8 @@ private:
 			sum = 0.0;
 
 			for (int j = 0; j < total_values; j++)
-			{
-				sum += pow(clusters[i].getCentralValue(j) -
-						   point.getValue(j), 2.0);
-			}
+				sum += ((clusters[i].getCentralValue(j) - point.getValue(j)) *
+				        (clusters[i].getCentralValue(j) - point.getValue(j)));
 
 			dist = sqrt(sum);
 
@@ -240,9 +239,10 @@ public:
 		this->maxObjects = maxObjects;
 	}
 
-	std::vector<Cluster> run(std::vector<Point> & points, FileName fnClusters)
+	std::vector<Cluster> run(std::vector<Point> & points,
+	                         FileName fnClusters, FileName fnPoints)
 	{
-        // choose K distinct points for the centers of the clusters
+        // create clusters and choose K points as their centers centers
         std::vector<int> prohibited_indexes;
 
         for (int i = 0; i < K; i++)
@@ -263,9 +263,11 @@ public:
             }
         }
 
+        // if clusters already exists, load their computed centers
         std::fstream savedClusters(fnClusters.c_str());
         if (savedClusters.good())
         {
+            std::cerr << "NACITAVAM CLUSTERY " << std::endl;
             std::string line;
             for (int i = 0; i < K; i++)
             {
@@ -285,42 +287,58 @@ public:
 		{
 			bool done = true;
 
-			// associates each point to the nearest center
-			for (int i = 0; i < total_points; i++)
-			{
-				int old_cluster = points[i].getCluster();
-				int nearest_center = getIDNearestCenter(points[i]);
+            // when total_points is larger than threshold value maxObjects
+            // we only assign labels to point based on nearest center
+            if ((maxObjects > 0) && (total_points > maxObjects))
+            {
+                std::cerr << "TOTO NEMA BYT " << std::endl;
+                for (int i = 0; i < total_points; i++)
+                {
+                    int nearest_center = getIDNearestCenter(points[i]);
+                    points[i].setCluster(nearest_center);
+                    clusters[nearest_center].addPoint(points[i]);
+                }
+            }
+            else  // perform k-means clustering
+            {
+                // associates each point to the nearest center
+                for (int i = 0; i < total_points; i++)
+                {
+                    int old_cluster = points[i].getCluster();
+                    int nearest_center = getIDNearestCenter(points[i]);
 
-				if (old_cluster != nearest_center)
-				{
-					if (old_cluster != -1)
-						clusters[old_cluster].removePoint(points[i].getID());
+                    if (old_cluster != nearest_center)
+                    {
+                        if (old_cluster != -1)
+                            clusters[old_cluster].removePoint(points[i].getID());
 
-					points[i].setCluster(nearest_center);
-					clusters[nearest_center].addPoint(points[i]);
-					done = false;
-				}
-			}
+                        points[i].setCluster(nearest_center);
+                        clusters[nearest_center].addPoint(points[i]);
+                        done = false;
+                    }
+                }
 
-			// recalculating the center of each cluster
-			for (int i = 0; i < K; i++)
-			{
-				for (int j = 0; j < total_values; j++)
-				{
-					int total_points = clusters[i].getTotalPoints();
-					double sum = 0.0;
+                // recalculating the center of each cluster
+                for (int i = 0; i < K; i++)
+                {
+                    for (int j = 0; j < total_values; j++)
+                    {
+                        int total_points = clusters[i].getTotalPoints();
+                        double sum = 0.0;
 
-					if (total_points > 0)
-					{
-						for (int p = 0; p < total_points; p++)
-							sum += clusters[i].getPoint(p).getValue(j);
-						clusters[i].setCentralValue(j, sum / total_points);
-					}
-				}
-			}
-			if (done == true || iter >= maxIterations) break;
+                        if (total_points > 0)
+                        {
+                            for (int p = 0; p < total_points; p++)
+                                sum += clusters[i].getPoint(p).getValue(j);
 
-			iter++;
+                            clusters[i].setCentralValue(j, sum / total_points);
+                        }
+                    }
+                }
+
+                if (done == true || iter >= maxIterations) break;
+                iter++;
+            }
 		}
 
         // This code is removing outliers, whose distance from centroid is
@@ -361,26 +379,33 @@ public:
         }
         */
 
-        std::ofstream saveClusters;
-        saveClusters.open(fnClusters.c_str());
+        std::ofstream saveData;
 
+        // saving clusters
+        saveData.open(fnClusters.c_str());
         for (int i = 0; i < K; i++)
         {
             for (int j = 0; j < total_values; j++)
-            {
-                saveClusters << clusters[i].getCentralValue(j) << " ";
-            }
-            saveClusters << std::endl;
+                saveData << clusters[i].getCentralValue(j) << " ";
+            saveData << std::endl;
         }
-        saveClusters.close();
+        saveData.close();
+
+        // saving points
+        saveData.open(fnPoints.c_str());
+        for (int i = 0; i < total_points; i++)
+        {
+            for (int j = 0; j < total_values; j++)
+                saveData << points[i].getValue(j) << " ";
+            saveData << std::endl;
+        }
+        saveData.close();
 
         return clusters;
 	}
 };
 
-bool ProgClassifyFast2D::isParticle(size_t id)
-{
-    int count = XSIZE(Iref()) + YSIZE(Iref()) / 2;
+    /*int count = XSIZE(Iref()) + YSIZE(Iref()) / 2;
     int hist[256] = {};
     int low_thresh_val, high_thresh_val, val;
     int low_thresh_cnt = 0, high_thresh_cnt = 0;
@@ -443,51 +468,79 @@ bool ProgClassifyFast2D::isParticle(size_t id)
         }
         --it1;
     }
-    dist_low = dist_low / comparisons;
-
-    return true;
-}
+    dist_low = dist_low / comparisons;*/
 
 void ProgClassifyFast2D::run()
 {
     MetaData SF;
     SF.read(fnSel);
     FileName fnImg, fnClass, fnTemp;
-    int itemId = 0, countItems = 0;
+    Image<double> I;
+    int allItems = 0;
     MDRow row;
     MetaData MDsummary, MDclass;
     CorrelationAux aux;
     std::vector<double> fv;
     std::vector<Point> points;
     std::vector<Cluster> clusters;
-    ProgExtractFeatures features;
+    ProgExtractFeatures ef;
+    srand (time(NULL));
 
+    // reading new images from input file
     FOR_ALL_OBJECTS_IN_METADATA(SF)
     {
-        countItems++;
+        allItems++;
     	SF.getValue(MDL_IMAGE, fnImg,__iter.objId);
-    	Iref.read(fnImg);
-    	Iref().setXmippOrigin();
-    	centerImageTranslationally(Iref(), aux);
-
-        if (isParticle(__iter.objId))
-        {
-            itemId++;
-            features.extractLBP(Iref(), fv);
-            Point p(countItems, fv);
-            points.push_back(p);
-        }
+    	I.read(fnImg);
+    	I().setXmippOrigin();
+    	centerImageTranslationally(I(), aux);
+    	fv.clear();
+        ef.extractVariance(I(), fv);
+        Point p(allItems, fv);
+        points.push_back(p);
     }
+    int newItems = allItems;
+std::cerr << "NOVE BODY " << points.size() << " " << allItems << std::endl;
 
-    std::size_t extraPath = fnOut.find_last_of("/");
-    KMeans kmeans(K, itemId, fv.size(), 100, maxObjects);
-    clusters = kmeans.run(points, fnOut.substr(0, extraPath+1) + fnClusters);
-    fnTemp = fnOut.substr(0, extraPath+1) + "temp.xmd";
+    // preparing all the paths to external files
+    std::size_t extraPath = fnSel.find_last_of("/");
+    fnOut = fnSel.substr(0, extraPath+1) + fnOut.c_str();
+    fnClusters = fnSel.substr(0, extraPath+1) + fnClusters.c_str();
+    fnPoints = fnSel.substr(0, extraPath+1) + fnPoints.c_str();
+    fnTemp = fnSel.substr(0, extraPath+1) + "output_OLD.xmd";
 
+    // loading all the stored points from file (their count is unknown here)
+    std::vector<double> fv_load;
+    std::fstream savedPoints(fnPoints.c_str());
+    std::string line;
+    while (savedPoints.good())
+    {
+        std::getline(savedPoints, line);
+        if (line.size() < 2) break;
+        allItems++;
+        std::stringstream ss(line);
+        fv_load.clear();
+        double point_value;
+        for (int j = 0; j < fv.size(); j++)
+        {
+            ss >> point_value;
+            fv_load.push_back(point_value);
+        }
+        Point p(allItems, fv_load);
+        points.push_back(p);
+    }
+std::cerr << "PRIDANE STARE BODY " << points.size() << " " << allItems << std::endl;
+
+    // performing k-means clustering
+    KMeans kmeans(K, allItems, fv.size(), 100, maxObjects);
+    clusters = kmeans.run(points, fnClusters, fnPoints);
+
+    // saving results to temp file for later writing purposes
     std::ifstream f(fnOut.c_str());
     if (f.good())
         rename(fnOut.c_str(), fnTemp.c_str());
 
+    // for cycle writing output file
     std::size_t classCount;
     for (int i = 0; i < K; i++)
     {
@@ -496,46 +549,42 @@ void ProgClassifyFast2D::run()
 
         size_t ii = MDsummary.addObject();
         MDsummary.setValue(MDL_REF, i+1, ii);
-
-        std::ifstream f(fnTemp.c_str());
-        if (f.good())
-        {
-            fnClass=formatString("classes@%s", fnTemp.c_str());
-            MDclass.read(fnClass);
-            MDclass.getRow(row, i+1);
-            row.getValue(MDL_CLASS_COUNT, classCount);
-            MDsummary.setValue(MDL_CLASS_COUNT,
-                (size_t) total_points_cluster + classCount, ii);
-        }
-        else
-            MDsummary.setValue(MDL_CLASS_COUNT,
-                (size_t) total_points_cluster, ii);
+        MDsummary.setValue(MDL_CLASS_COUNT, (size_t) total_points_cluster, ii);
 
         std::ostringstream clusterValues;
         clusterValues << "[";
-
         for (int j = 0; j < fv.size()-1; j++)
             clusterValues << clusters[i].getCentralValue(j) << ", ";
-
         clusterValues << clusters[i].getCentralValue(fv.size()-1) << "]";
 
         MDsummary.setValue(MDL_FAST2D_CENTROID, clusterValues.str(), ii);
         MDsummary.write(formatString("classes@%s", fnOut.c_str()), MD_APPEND);
         MDclass.clear();
 
+        std::ifstream f(fnTemp.c_str());
         if (f.good())
         {
             fnClass=formatString("class%06d_images@%s", i+1, fnTemp.c_str());
             MDclass.read(fnClass);
         }
 
+        size_t oldItemID = 0;
         for (int j = 0; j < total_points_cluster; j++)
         {
             SF.getRow(row, clusters[i].getPoint(j).getID());
-            size_t recId = MDclass.addRow(row);
-            MDclass.setValue(MDL_REF, i+1, recId);
+            size_t itemId;
+            row.getValue(MDL_ITEM_ID, itemId);
+            if (itemId != oldItemID)
+            {
+                size_t recId = MDclass.addRow(row);
+                MDclass.setValue(MDL_REF, i+1, recId);
+            }
+            else
+                MDclass.getRow(row, clusters[i].getPoint(j).getID());
+
             MDclass.write(formatString("class%06d_images@%s",
                 i+1, fnOut.c_str()), MD_APPEND);
+            oldItemID = itemId;
         }
     }
 }

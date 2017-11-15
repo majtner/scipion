@@ -39,18 +39,14 @@ public:
     /**  Filename clusters */
     FileName fnClusters;
 
+    /**  Filename points */
+    FileName fnPoints;
+
     /**  Number of clusters */
     int K;
 
     /**  Maximum number of objects used for clustering */
     int maxObjects;
-
-public:
-    // Image holding current reference
-    Image<double> Iref;
-
-    /**  Masks for Haar features */
-    MultidimArray<int> masks[7];
 
 public:
     /// Read argument
@@ -61,9 +57,6 @@ public:
 
     /// Define parameters
     void defineParams();
-
-    /// To eliminate outliers
-    bool isParticle(size_t id);
 
     /// Main routine
     void run();
