@@ -28,7 +28,6 @@
 #include <data/filters.h>
 #include <data/morphology.h>
 #include <numeric>
-#include <set>
 
 
 // Read arguments ==========================================================
@@ -53,7 +52,7 @@ void ProgClassifyFast2D::show()
     << "Number of clusters:                     " << K          << std::endl
     << "Filename with clusters:                 " << fnClusters << std::endl
     << "Filename with points:                   " << fnPoints   << std::endl
-    << "Max. number of objects for clustering:  " << maxObjects << std::endl
+    << "Threshold for number of particles:      " << maxObjects << std::endl
     ;
 }
 
@@ -66,7 +65,7 @@ void ProgClassifyFast2D::defineParams()
     addParamsLine("  -k <int>                      : Number of clusters");
     addParamsLine("  [-c <image=\"clusters.xmd\">] : Filename with clusters");
     addParamsLine("  [-p <image=\"points.xmd\">]   : Filename with points");
-    addParamsLine("  [-m <int=\"0\">]              : Max. number of objects for clustering");
+    addParamsLine("  [-m <int=\"-1\">]             : Threshold for number of particles after which the position of clusters will be fixed");
 }
 
 
@@ -267,7 +266,6 @@ public:
         std::fstream savedClusters(fnClusters.c_str());
         if (savedClusters.good())
         {
-            std::cerr << "NACITAVAM CLUSTERY " << std::endl;
             std::string line;
             for (int i = 0; i < K; i++)
             {
@@ -289,9 +287,8 @@ public:
 
             // when total_points is larger than threshold value maxObjects
             // we only assign labels to point based on nearest center
-            if ((maxObjects > 0) && (total_points > maxObjects))
+            if ((maxObjects != -1) && (total_points > maxObjects))
             {
-                std::cerr << "TOTO NEMA BYT " << std::endl;
                 for (int i = 0; i < total_points; i++)
                 {
                     int nearest_center = getIDNearestCenter(points[i]);
@@ -335,10 +332,9 @@ public:
                         }
                     }
                 }
-
-                if (done == true || iter >= maxIterations) break;
-                iter++;
             }
+            if (done == true || iter >= maxIterations) break;
+            iter++;
 		}
 
         // This code is removing outliers, whose distance from centroid is
@@ -405,109 +401,71 @@ public:
 	}
 };
 
-    /*int count = XSIZE(Iref()) + YSIZE(Iref()) / 2;
-    int hist[256] = {};
-    int low_thresh_val, high_thresh_val, val;
-    int low_thresh_cnt = 0, high_thresh_cnt = 0;
-    typedef std::pair<int, int> pairs;
-    std::set<pairs> low_inten_pts, high_inten_pts;
-
-    double m, M;
-    Iref().computeDoubleMinMax(m, M);
-    FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(Iref())
-    {
-        val = floor(((DIRECT_MULTIDIM_ELEM(Iref(), n) - m) * 255.0) / (M - m));
-        hist[val]++;
-    }
-
-    for (low_thresh_val = 0; low_thresh_cnt < count; low_thresh_val++)
-        low_thresh_cnt += hist[low_thresh_val];
-    for (high_thresh_val = 255; high_thresh_cnt < count; high_thresh_val--)
-        high_thresh_cnt += hist[high_thresh_val];
-
-    FOR_ALL_DIRECT_ELEMENTS_IN_ARRAY2D(Iref())
-    {
-        val = floor(((DIRECT_A2D_ELEM(Iref(), i, j) - m) * 255.0) / (M - m));
-        if (val < low_thresh_val)
-            low_inten_pts.insert(std::make_pair(i, j));
-        else if (val > high_thresh_val)
-            high_inten_pts.insert(std::make_pair(i, j));
-    }
-
-    double dist_high = 0.0, dist_low = 0.0;
-    int comparisons = 0;
-
-    for (std::set<pairs>:: iterator it1 = high_inten_pts.begin();
-         it1 != --high_inten_pts.end(); ++it1)
-    {
-        pairs tmp1 = *it1;
-        for (std::set<pairs>::iterator it2 = ++it1;
-             it2 != high_inten_pts.end(); ++it2)
-        {
-            pairs tmp2 = *it2;
-            dist_high += sqrt(pow(tmp1.first - tmp2.first, 2.0) +
-                              pow(tmp1.second - tmp2.second, 2.0));
-            comparisons++;
-        }
-        --it1;
-    }
-    dist_high = dist_high / comparisons;
-
-    comparisons = 0;
-    for (std::set<pairs>:: iterator it1 = low_inten_pts.begin();
-         it1 != --low_inten_pts.end(); ++it1)
-    {
-        pairs tmp1 = *it1;
-        for (std::set<pairs>::iterator it2 = ++it1;
-             it2 != low_inten_pts.end(); ++it2)
-        {
-            pairs tmp2 = *it2;
-            dist_low += sqrt(pow(tmp1.first - tmp2.first, 2.0) +
-                             pow(tmp1.second - tmp2.second, 2.0));
-            comparisons++;
-        }
-        --it1;
-    }
-    dist_low = dist_low / comparisons;*/
-
 void ProgClassifyFast2D::run()
 {
-    MetaData SF;
-    SF.read(fnSel);
-    FileName fnImg, fnClass, fnTemp;
-    Image<double> I;
-    int allItems = 0;
+    MetaData SF, MDsummary, MDclass, MDallDone;
     MDRow row;
-    MetaData MDsummary, MDclass;
+    FileName fnImg, fnClass, fnallDone;
+    Image<double> I, Imasked;
+    MultidimArray< std::complex<double> > Icomplex;
     CorrelationAux aux;
-    std::vector<double> fv;
+    std::vector<std::vector<double> > fvs;
+    std::vector<double> fv, fv_temp;
     std::vector<Point> points;
     std::vector<Cluster> clusters;
     ProgExtractFeatures ef;
     srand (time(NULL));
 
     // reading new images from input file
+    SF.read(fnSel);
     FOR_ALL_OBJECTS_IN_METADATA(SF)
     {
-        allItems++;
     	SF.getValue(MDL_IMAGE, fnImg,__iter.objId);
     	I.read(fnImg);
     	I().setXmippOrigin();
     	centerImageTranslationally(I(), aux);
+    	//denoiseTVFilter(I(), 200);
     	fv.clear();
+
+    	
+        ef.extractEntropy(I(), Imasked(), fv);
+        ef.extractZernike(I(), fv);
+        //ef.extractLBP(I(), fv);
         ef.extractVariance(I(), fv);
-        Point p(allItems, fv);
-        points.push_back(p);
+        //ef.extractGranulo(I(), fv);
+        ef.extractRamp(I(), fv);
+        ef.extractHistDist(I(), fv);
+        fvs.push_back(fv);
     }
-    int newItems = allItems;
-std::cerr << "NOVE BODY " << points.size() << " " << allItems << std::endl;
+
+    double min_item, max_item;
+    for(int i = 0; i < fv.size(); i++)
+    {
+        fv_temp.clear();
+        for (int j = 0; j < fvs.size(); j++)
+            fv_temp.push_back(fvs[j][i]);
+
+        max_item = *std::max_element(fv_temp.begin(), fv_temp.end());
+        min_item = *std::min_element(fv_temp.begin(), fv_temp.end());
+        for (int j = 0; j < fvs.size(); j++)
+            fvs[j][i] = ((fvs[j][i] - min_item)) / (max_item - min_item);
+    }
+
+    int allItems = 0;
+    FOR_ALL_OBJECTS_IN_METADATA(SF)
+    {
+        allItems++;
+        Point p(allItems, fvs.front());
+        points.push_back(p);
+        fvs.erase(fvs.begin());
+    }
 
     // preparing all the paths to external files
     std::size_t extraPath = fnSel.find_last_of("/");
     fnOut = fnSel.substr(0, extraPath+1) + fnOut.c_str();
     fnClusters = fnSel.substr(0, extraPath+1) + fnClusters.c_str();
     fnPoints = fnSel.substr(0, extraPath+1) + fnPoints.c_str();
-    fnTemp = fnSel.substr(0, extraPath+1) + "output_OLD.xmd";
+    fnallDone = fnSel.substr(0, extraPath+1) + "allDone.xmd";
 
     // loading all the stored points from file (their count is unknown here)
     std::vector<double> fv_load;
@@ -529,27 +487,19 @@ std::cerr << "NOVE BODY " << points.size() << " " << allItems << std::endl;
         Point p(allItems, fv_load);
         points.push_back(p);
     }
-std::cerr << "PRIDANE STARE BODY " << points.size() << " " << allItems << std::endl;
 
     // performing k-means clustering
-    KMeans kmeans(K, allItems, fv.size(), 100, maxObjects);
+    KMeans kmeans(K, allItems, fv.size(), allItems, maxObjects);
     clusters = kmeans.run(points, fnClusters, fnPoints);
 
-    // saving results to temp file for later writing purposes
-    std::ifstream f(fnOut.c_str());
-    if (f.good())
-        rename(fnOut.c_str(), fnTemp.c_str());
-
     // for cycle writing output file
-    std::size_t classCount;
-    for (int i = 0; i < K; i++)
+    for (int i = 0; i < clusters.size(); i++)
     {
-        int total_points_cluster = clusters[i].getTotalPoints();
-        int old_points_cluster;
+        size_t total_points_cluster = clusters[i].getTotalPoints();
 
         size_t ii = MDsummary.addObject();
         MDsummary.setValue(MDL_REF, i+1, ii);
-        MDsummary.setValue(MDL_CLASS_COUNT, (size_t) total_points_cluster, ii);
+        MDsummary.setValue(MDL_CLASS_COUNT, total_points_cluster, ii);
 
         std::ostringstream clusterValues;
         clusterValues << "[";
@@ -561,30 +511,16 @@ std::cerr << "PRIDANE STARE BODY " << points.size() << " " << allItems << std::e
         MDsummary.write(formatString("classes@%s", fnOut.c_str()), MD_APPEND);
         MDclass.clear();
 
-        std::ifstream f(fnTemp.c_str());
-        if (f.good())
-        {
-            fnClass=formatString("class%06d_images@%s", i+1, fnTemp.c_str());
-            MDclass.read(fnClass);
-        }
+        std::ifstream f(fnallDone.c_str());
+        if (f.good()) MDallDone.read(fnallDone);
 
-        size_t oldItemID = 0;
         for (int j = 0; j < total_points_cluster; j++)
         {
-            SF.getRow(row, clusters[i].getPoint(j).getID());
-            size_t itemId;
-            row.getValue(MDL_ITEM_ID, itemId);
-            if (itemId != oldItemID)
-            {
-                size_t recId = MDclass.addRow(row);
-                MDclass.setValue(MDL_REF, i+1, recId);
-            }
-            else
-                MDclass.getRow(row, clusters[i].getPoint(j).getID());
-
-            MDclass.write(formatString("class%06d_images@%s",
-                i+1, fnOut.c_str()), MD_APPEND);
-            oldItemID = itemId;
+            MDallDone.getRow(row, clusters[i].getPoint(j).getID());
+            size_t recId = MDclass.addRow(row);
+            MDclass.setValue(MDL_REF, i+1, recId);
         }
+        MDclass.write(formatString("class%06d_images@%s", i+1,
+                      fnOut.c_str()), MD_APPEND);
     }
 }

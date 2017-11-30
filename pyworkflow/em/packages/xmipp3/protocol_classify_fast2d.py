@@ -39,7 +39,7 @@ from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
 
 
 class XmippProtFastClassif2D(ProtClassify2D):
-    """ Classifies a set of images using a clustering algorithm to subdivide
+    """ Classifies a set of particles using a clustering algorithm to subdivide
     the original dataset into a given number of classes. """
     
     _label = '2D kmeans clustering'
@@ -59,6 +59,12 @@ class XmippProtFastClassif2D(ProtClassify2D):
         form.addParam('numberOfClasses', param.IntParam, default=10,
                       label='Number of 2D classes:',
                       help='Number of 2D classes to be created.')
+        form.addParam('maxObjects', param.IntParam, default=-1,
+                      expertLevel=param.LEVEL_ADVANCED,
+                      label='Threshold for number of particles:',
+                      help='Threshold for number of particles after which the '
+                           'position of clusters will be fixed.')
+
 
         form.addParallelSection(threads=1, mpi=1)
 
@@ -193,7 +199,8 @@ class XmippProtFastClassif2D(ProtClassify2D):
 
     def fastClassifyStep(self, fnInputMd):
         iteration=0
-        args = "-i %s -k %d" % (fnInputMd, self.numberOfClasses.get())
+        args = "-i %s -k %d -m %d" % (fnInputMd, self.numberOfClasses.get(),
+                                      self.maxObjects.get())
         self.runJob("xmipp_classify_fast_2d", args)
         cleanPath(self._getExtraPath("level_00"))
         blocks = md.getBlocksInMetaDataFile(self._getExtraPath("output.xmd"))
