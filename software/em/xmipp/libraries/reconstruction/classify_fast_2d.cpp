@@ -424,17 +424,14 @@ void ProgClassifyFast2D::run()
     	I.read(fnImg);
     	I().setXmippOrigin();
     	centerImageTranslationally(I(), aux);
-    	//denoiseTVFilter(I(), 200);
     	fv.clear();
-
-    	
         ef.extractEntropy(I(), Imasked(), fv);
-        ef.extractZernike(I(), fv);
+        //ef.extractZernike(I(), fv);
         //ef.extractLBP(I(), fv);
-        ef.extractVariance(I(), fv);
+        //ef.extractVariance(I(), fv);
         //ef.extractGranulo(I(), fv);
-        ef.extractRamp(I(), fv);
-        ef.extractHistDist(I(), fv);
+        //ef.extractRamp(I(), fv);
+        //ef.extractHistDist(I(), fv);
         fvs.push_back(fv);
     }
 
