@@ -306,6 +306,7 @@ class Protocol(Step):
 
     # Version where protocol appeared first time
     _lastUpdateVersion = pw.VERSION_1
+    _stepsCheckSecs = 3
 
     def __init__(self, **kwargs):
         Step.__init__(self, **kwargs)
@@ -974,13 +975,14 @@ class Protocol(Step):
 
         if startIndex == len(self._steps):
             self.lastStatus = STATUS_FINISHED
-            self.info("All steps seems to be FINISHED, nothing to be done.")
+            self.info("All steps seem to be FINISHED, nothing to be done.")
         else:
             self.lastStatus = self.status.get()
             self._stepsExecutor.runSteps(self._steps,
                                          self._stepStarted,
                                          self._stepFinished,
-                                         self._stepsCheck)
+                                         self._stepsCheck,
+                                         self._stepsCheckSecs)
         self.setStatus(self.lastStatus)
         self._store(self.status)
 
@@ -1017,11 +1019,20 @@ class Protocol(Step):
         """ This will copy relations from protocol other to self """
         pass
 
-    def copy(self, other, copyId=True):
+    def copy(self, other, copyId=True, excludeInputs=False):
 
         from pyworkflow.project import OBJECT_PARENT_ID
 
-        copyDict = Object.copy(self, other, copyId)
+        # Input attributes list
+        inputAttributes = []
+
+        # If need to exclude input attributes
+        if excludeInputs:
+            # Get all the input attributes, to be ignored at copy():
+            for key, attr in self.iterInputAttributes():
+                inputAttributes.append(key)
+
+        copyDict = Object.copy(self, other, copyId, inputAttributes)
         self._store()
         self.mapper.deleteRelations(self)
 
@@ -1414,7 +1425,7 @@ class Protocol(Step):
         """
         queueName, queueParams = self.getQueueParams()
         hc = self.getHostConfig()
-
+        
         script = self._getLogsPath(hc.getSubmitPrefix() + self.strId() + '.job')
         d = {'JOB_SCRIPT': script,
              'JOB_NODEFILE': script.replace('.job', '.nodefile'),
@@ -1646,7 +1657,7 @@ class Protocol(Step):
         try:
             # Get the first author surname
             if useKeyLabel:
-                label = cite['id']
+                label = cite['ID']
             else:
                 label = cite['author'].split(' and ')[0].split(',')[0].strip()
                 label += ', et al., %s, %s' % (cite['journal'], cite['year'])
