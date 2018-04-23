@@ -37,6 +37,7 @@ from eman2 import *
 from protocol_boxing import EmanProtBoxing
 from protocol_initialmodel import EmanProtInitModel
 from protocol_reconstruct import EmanProtReconstruct
+from protocol_refine2D import EmanProtRefine2D
 from protocol_refineasy import EmanProtRefine
 from protocol_autopick import SparxGaussianProtPicking
 from viewer import EmanViewer, RefineEasyViewer
