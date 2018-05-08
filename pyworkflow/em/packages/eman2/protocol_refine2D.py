@@ -36,6 +36,8 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, IntParam, Enum
                                         StringParam, BooleanParam)
 from pyworkflow.utils.path import cleanPattern, makePath, createLink
 from convert import rowToAlignment
+from pyworkflow.em.packages.xmipp3.convert import xmippToLocation
+import pyworkflow.em.metadata as md
                                
 class EmanProtRefine2D(em.ProtRefine3D):
     _label = 'refine 2D'
@@ -179,8 +181,47 @@ class EmanProtRefine2D(em.ProtRefine3D):
         writeSetOfParticles(partSet, storePath, alignType=partAlign)
         args = "--iter=6 --naliref=7 --nbasisfp=5 --input=particles/mic_000000.hdf --ncls=5 --simcmp=ccc --simalign=rotate_translate_flip --simaligncmp=ccc --simralign=refine --simraligncmp=ccc --classcmp=ccc --classalign=rotate_translate_flip --classaligncmp=ccc --classralign=refine --classraligncmp=ccc --classiter=2 --classkeep=1.5 --classnormproc=normalize.edgemean --classaverager=mean --normproj --classkeepsig --parallel=thread:4"
         program = getEmanProgram('e2refine2d.py')
-        #self.runJob(program, args, cwd=self._getExtraPath())
+        self.runJob(program, args, cwd=self._getExtraPath())
+
+        set2D = self._createSetOfClasses2D(self.inputParticles.get())
+        self._fillClassesFromLevel(set2D)
+        result = {'outputClasses': set2D}
+        self._defineOutputs(**result)
+        self._defineSourceRelation(self.inputParticles, set2D)
+
         self._insertFunctionStep('createOutputStep')
+
+    def _fillClassesFromLevel(self, clsSet):
+        self._loadClassesInfo(self._getExtraPath("r2d_01/classes_06.hdf"))
+        iterator = md.SetMdIterator(self.inputParticles.get().getFileName(),
+                                    sortByLabel=md.MDL_ITEM_ID,
+                                    updateItemCallback=self._updateParticle,
+                                    skipDisabled=True)
+        clsSet.classifyItems(updateItemCallback=iterator.updateItem,
+                             updateClassCallback=self._updateClass)
+
+    def _updateParticle(self, item, row):
+        item.setClassId(row.getValue(md.MDL_REF))
+        item.setTransform(rowToAlignment(row, '2D'))
+
+    def _updateClass(self, item):
+        classId = item.getObjId()
+        if classId in self._classesInfo:
+            index, fn, _ = self._classesInfo[classId]
+            item.setAlignment2D()
+            rep = item.getRepresentative()
+            rep.setLocation(index, fn)
+            rep.setSamplingRate(self.inputParticles.get().getSamplingRate())
+
+    def _loadClassesInfo(self, filename):
+        """ Read some information about the produced 2D classes
+        from the metadata file.
+        """
+        self._classesInfo = {}  # store classes info, indexed by class id
+        mdClasses = md.MetaData(filename)
+        for classNumber, row in enumerate(md.iterRows(mdClasses)):
+            index, fn = xmippToLocation(row.getValue(md.MDL_IMAGE))
+            self._classesInfo[classNumber + 1] = (index, fn, row.clone())
     
     #--------------------------- STEPS functions -------------------------------
     def createLinkSteps(self):
