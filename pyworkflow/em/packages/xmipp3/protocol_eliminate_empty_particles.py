@@ -54,31 +54,44 @@ class XmippProtEliminateEmptyParticles(ProtClassify2D):
     def _defineParams(self, form):
         form.addSection(label=Message.LABEL_INPUT)
 
+        form.addParam('inputType', param.EnumParam,
+                      choices=['Particles', 'Averages'], default=0,
+                      label="Choose input type", help='Select an input type',
+                      display=param.EnumParam.DISPLAY_HLIST)
         form.addParam('inputParticles', param.PointerParam,
-                      label="Input images",
+                      label="Input particles", condition="inputType == 0",
                       important=True, pointerClass='SetOfParticles',
-                      help='Select the input images to be classified.')
+                      help='Select the input particles to be classified.')
         form.addParam('threshold', param.FloatParam, default=1.5,
                       label='Threshold used in elimination:',
-                      help='Higher threshold => '
-                           'more particles will be eliminated. '
-                           'Set to -1 for no elimination.')
+                      condition="inputType == 0",
+                      help='Higher threshold => more particles will be '
+                           'eliminated. Set to -1 for no elimination.')
+        form.addParam('inputAverages', param.PointerParam,
+                      label="Input averages", condition="inputType == 1",
+                      important=True, pointerClass='SetOfAverages',
+                      help='Select the input averages to be classified.')
+        form.addParam('thresholdAver', param.FloatParam, default=8.0,
+                      label='Threshold used in elimination:',
+                      condition="inputType == 1",
+                      help='Higher threshold => more averages will be '
+                           'eliminated. Set to -1 for no elimination.')
         form.addParam('addFeatures', param.BooleanParam, default=False,
                       label='Add features', expertLevel=param.LEVEL_ADVANCED,
                       help='Add features used for the ranking to each '
                            'one of the input particles')
-        form.addParam('useDenoising', param.BooleanParam, default=False,
+        form.addParam('useDenoising', param.BooleanParam, default=True,
                       label='Turning on denoising',
                       expertLevel=param.LEVEL_ADVANCED,
                       help='Option for turning on denoising method '
                            'while computing emptiness feature')
-        form.addParam('denoising', param.IntParam, default=50,
+        form.addParam('denoising', param.FloatParam, default=5.0,
                       expertLevel=param.LEVEL_ADVANCED,
                       condition='useDenoising',
                       label='Denoising factor:',
-                      help='Factor to be used during denoising operation.'
+                      help='Factor to be used during Gaussian blurring. '
                            'Higher value applies stronger denoising,'
-                           'could be more precise by also very slow.')
+                           'could be more precise but also slower.')
 
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
@@ -137,7 +150,7 @@ class XmippProtEliminateEmptyParticles(ProtClassify2D):
         if self.addFeatures:
             args+=" --addFeatures"
         if self.useDenoising:
-            args += " --useDenoising -d %d" % self.denoising.get()
+            args += " --useDenoising -d %f" % self.denoising.get()
         self.runJob("xmipp_image_eliminate_empty_particles", args)
         os.remove(fnInputMd)
         streamMode = Set.STREAM_CLOSED \
