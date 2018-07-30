@@ -39,6 +39,7 @@ import EMAN2 as eman
 
 MODE_WRITE = 'write'
 MODE_READ = 'read'
+MODE_READ_CLASSES = 'read_classes'
 
 
 def writeParticles():
@@ -184,7 +185,15 @@ def readParticles(inputParts, inputCls, inputClasses, outputTxt):
             shiftY = 0
         print >> f, index, enable, rot, tilt, psi, shiftX, shiftY
     f.close()
-    
+
+def readClasses(inputFile, numberOfClasses, outputFile):
+    file = eman.EMData.read_images(inputFile)
+    f = open(outputFile, 'w')
+    for index in range(0, int(numberOfClasses)):
+        classPtclIdxs = file[index].get_attr_dict().get('class_ptcl_idxs',
+                                                        None)
+        print >> f, classPtclIdxs
+    f.close()
     
 if __name__ == '__main__':
     if len(sys.argv) > 0:
@@ -199,6 +208,11 @@ if __name__ == '__main__':
             inputClasses = sys.argv[4]
             outputTxt = sys.argv[5]
             readParticles(inputParts, inputCls, inputClasses, outputTxt)
+        elif mode == MODE_READ_CLASSES:
+            inputFile = sys.argv[2]
+            numberOfClasses = sys.argv[3]
+            outputFile = sys.argv[4]
+            readClasses(inputFile, numberOfClasses, outputFile)
         else:
             raise Exception("e2converter: Unknown mode '%s'" % mode)
     else:

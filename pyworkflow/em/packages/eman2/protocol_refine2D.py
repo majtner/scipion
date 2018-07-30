@@ -31,7 +31,7 @@ from glob import glob
 import pyworkflow.em as em
 from pyworkflow.em.data import SetOfClasses2D
 from pyworkflow.em.packages.eman2.eman2 import getEmanProgram, validateVersion
-from pyworkflow.em.packages.eman2.convert import createEmanProcess
+from pyworkflow.em.packages.eman2.convert import createEmanProcess, writeSetOfParticles
 from pyworkflow.protocol.params import (PointerParam, FloatParam, IntParam, EnumParam,
                                         StringParam, BooleanParam)
 from pyworkflow.utils.path import cleanPattern, makePath, createLink
@@ -173,7 +173,6 @@ class EmanProtRefine2D(em.ProtRefine3D):
     def _insertAllSteps(self):        
         self._createFilenameTemplates()
         self._createIterTemplates(self._getRun())
-        from pyworkflow.em.packages.eman2.convert import writeSetOfParticles
         partSet = self._getInputParticles()
         partAlign = partSet.getAlignment()
         storePath = self._getExtraPath("particles")
@@ -181,14 +180,11 @@ class EmanProtRefine2D(em.ProtRefine3D):
         writeSetOfParticles(partSet, storePath, alignType=partAlign)
         args = "--iter=6 --naliref=7 --nbasisfp=5 --input=particles/mic_000000.hdf --ncls=5 --simcmp=ccc --simalign=rotate_translate_flip --simaligncmp=ccc --simralign=refine --simraligncmp=ccc --classcmp=ccc --classalign=rotate_translate_flip --classaligncmp=ccc --classralign=refine --classraligncmp=ccc --classiter=2 --classkeep=1.5 --classnormproc=normalize.edgemean --classaverager=mean --normproj --classkeepsig --parallel=thread:4"
         program = getEmanProgram('e2refine2d.py')
-        self.runJob(program, args, cwd=self._getExtraPath())
-
-        set2D = self._createSetOfClasses2D(self.inputParticles.get())
-        self._fillClassesFromLevel(set2D)
-        result = {'outputClasses': set2D}
-        self._defineOutputs(**result)
-        self._defineSourceRelation(self.inputParticles, set2D)
-
+        # self.runJob(program, args, cwd=self._getExtraPath())
+        proc = createEmanProcess(args='read_classes %s %d %s' % (
+        "r2d_01/classes_06.hdf", 5, "classPtclIdxs.txt"),
+                                 direc=self._getExtraPath())
+        proc.wait()
         self._insertFunctionStep('createOutputStep')
 
     def _fillClassesFromLevel(self, clsSet):
@@ -240,7 +236,6 @@ class EmanProtRefine2D(em.ProtRefine3D):
         createLink(prevSetsDir, currSetsDir)
     
     def convertImagesStep(self):
-        from pyworkflow.em.packages.eman2.convert import writeSetOfParticles
         partSet = self._getInputParticles()
         partAlign = partSet.getAlignment()
         storePath = self._getExtraPath("particles")
@@ -270,15 +265,17 @@ class EmanProtRefine2D(em.ProtRefine3D):
         self.runJob(program, args, cwd=self._getExtraPath())
     
     def createOutputStep(self):
-        partSet = self._getInputParticles()
-        sets2D = self._createSetOfClasses2D(partSet)
-        from pyworkflow.em.packages.eman2.convert import readSetOfClasses2D
-        readSetOfClasses2D(sets2D, self._getPath('../034712_EmanProtRefine2D/extra/r2d_01/classes_06.hdf'))
-        outputSet = {'outputClasses': sets2D}
-        # self._defineOutputs(outputVolumes=volumes)
+        inputParticles = self._getInputParticles()
+        outputParts = self._createSetOfParticles()
+        classes2DSet = self._createSetOfClasses2D(inputParticles)
+        # self._fillClassesFromLevel(classes2DSet)
+        self._fillDataFromIter(outputParts, 6)
+        print(outputParts)
+        dddasdasdasdasdasdu
+        outputSet = {'outputClasses': classes2DSet}
         self._defineOutputs(**outputSet)
-        self._defineSourceRelation(self._getInputParticlesPointer(), sets2D)
-        #self._defineTransformRelation(self._getInputParticlesPointer(), newPartSet)
+        self._defineSourceRelation(self._getInputParticlesPointer(), classes2DSet)
+        # self._defineOutputs(outputVolumes=volumes)
     
     #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):
@@ -438,11 +435,9 @@ class EmanProtRefine2D(em.ProtRefine3D):
     def _execEmanProcess(self, numRun, iterN):
         clsFn = self._getFileName("cls", run=numRun, iter=iterN)
         classesFn = self._getFileName("classes", run=numRun, iter=iterN)
-        angles = self._getFileName('angles', iter=iterN)
-        
-        if not exists(angles) and exists(self._getFileName('clsEven', run=numRun, iter=iterN)):
-            proc = createEmanProcess(args='read %s %s %s %s'
-                                     % (self._getParticlesStack(), clsFn, classesFn,
-                                        self._getBaseName('angles', iter=iterN)),
-                                        direc=self._getExtraPath())
-            proc.wait()
+
+        proc = createEmanProcess(args='read %s %s %s %s'
+                                 % (self._getParticlesStack(), clsFn, classesFn,
+                                    self._getBaseName('angles', iter=iterN)),
+                                    direc=self._getExtraPath())
+        proc.wait()
