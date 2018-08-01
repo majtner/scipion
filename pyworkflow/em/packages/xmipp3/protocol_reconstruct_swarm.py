@@ -66,48 +66,62 @@ class XmippProtReconstructSwarm(ProtRefine3D):
     _label = 'swarm consensus'
     _version = VERSION_1_1
     
-    #--------------------------- DEFINE param functions --------------------------------------------
+    #--------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        
-        form.addParam('inputParticles', PointerParam, label="Full-size Images", important=True, 
-                      pointerClass='SetOfParticles', allowsNull=True,
+
+        form.addParam('inputParticles', PointerParam, label="Full-size Images",
+                      important=True, pointerClass='SetOfParticles',
+                      allowsNull=True,
                       help='Select a set of images at full resolution')
-        form.addParam('inputVolumes', PointerParam, label="Initial volumes", important=True,
-                      pointerClass='SetOfVolumes',
-                      help='Select a set of volumes with 2 volumes or a single volume')
-        form.addParam('particleRadius', IntParam, default=-1, label='Radius of particle (px)',
-                     help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')       
+        form.addParam('inputVolumes', PointerParam, label="Initial volumes",
+                      important=True, pointerClass='SetOfVolumes',
+                      help='Select a set of volumes with 2 volumes'
+                           ' or a single volume')
+        form.addParam('particleRadius', IntParam, default=-1,
+                      label='Radius of particle (px)',
+                      help='This is the radius (in pixels) of the spherical'
+                           ' mask covering the particle in the input images')
 
         form.addParam('symmetryGroup', StringParam, default="c1",
-                      label='Symmetry group', 
-                      help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
-                        'If no symmetry is present, give c1')
-        
-        form.addParam('nextMask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
-                      help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
+                      label='Symmetry group',
+                      help='See http://xmipp.cnb.uam.es/twiki/bin/view/'
+                           'Xmipp/Symmetry for a description of the symmetry '
+                           'groups format. If no symmetry is present, give c1')
 
-        form.addParam('numberOfIterations', IntParam, default=15, label='Number of iterations', expertLevel=LEVEL_ADVANCED)
-        form.addParam('targetResolution', FloatParam, label="Max. Target Resolution", default="12", expertLevel=LEVEL_ADVANCED,
-                      help="In Angstroms.")
-        form.addParam('minAngle', FloatParam, label="Min. Angle", default="10", expertLevel=LEVEL_ADVANCED,
-                      help="The angular search is limited by this parametr (in degrees).")
-        form.addParam('NimgTrain', IntParam, default=500, label='# Images to update', expertLevel=LEVEL_ADVANCED)
-        form.addParam('NimgTest', IntParam, default=100, label='# Images to evaluate', expertLevel=LEVEL_ADVANCED)
+        form.addParam('nextMask', PointerParam, label="Mask",
+                      pointerClass='VolumeMask', allowsNull=True,
+                      help='The mask values must be between 0 (remove'
+                           ' these pixels) and 1 (let them pass). '
+                           'Smooth masks are recommended.')
+
+        form.addParam('numberOfIterations', IntParam, default=15,
+                      label='Number of iterations', expertLevel=LEVEL_ADVANCED)
+        form.addParam('targetResolution', FloatParam,
+                      label="Max. Target Resolution", default="12",
+                      expertLevel=LEVEL_ADVANCED, help="In Angstroms.")
+        form.addParam('minAngle', FloatParam, label="Min. Angle", default="10",
+                      expertLevel=LEVEL_ADVANCED,
+                      help="The angular search is limited by this "
+                           "parametr (in degrees).")
+        form.addParam('NimgTrain', IntParam, default=500,
+                      label='# Images to update', expertLevel=LEVEL_ADVANCED)
+        form.addParam('NimgTest', IntParam, default=100,
+                      label='# Images to evaluate', expertLevel=LEVEL_ADVANCED)
         
         form.addParallelSection(threads=1, mpi=8)
     
-    #--------------------------- INSERT steps functions --------------------------------------------
+    #--------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self.imgsFn=self._getExtraPath('images.xmd')
-        self._insertFunctionStep('convertInputStep', self.inputParticles.getObjId())
+        self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('evaluateIndividuals',0)
         for self.iteration in range(1,self.numberOfIterations.get()+1):
-            self._insertFunctionStep('reconstructNewVolumes',self.iteration)
+            self._insertFunctionStep('reconstructNewVolumes')
             self._insertFunctionStep('postProcessing',self.iteration)
             self._insertFunctionStep('evaluateIndividuals',self.iteration)
             if self.iteration>1:
-                self._insertFunctionStep('updateVolumes',self.iteration)
+                self._insertFunctionStep('updateVolumes')
         self._insertFunctionStep('calculateAverage',self.numberOfIterations.get()+1)
         self._insertFunctionStep('cleanVolume',self._getExtraPath("volumeAvg.vol"))
         self._insertFunctionStep("createOutput")
@@ -129,7 +143,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         if newXdim!=objXdim:
             self.runJob('xmipp_transform_window',"-i %s --size %d"%(fnOut,newXdim),numberOfMpi=1)
 
-    def convertInputStep(self, inputParticlesId):
+    def convertInputStep(self):
         fnDir=self._getExtraPath()
         writeSetOfParticles(self.inputParticles.get(),self.imgsFn)
 
@@ -174,7 +188,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         xmipp.MetaData().write("best@"+self._getExtraPath("swarm.xmd")) # Empty write to guarantee this block is the first one
         xmipp.MetaData().write("bestByVolume@"+self._getExtraPath("swarm.xmd"),xmipp.MD_APPEND) # Empty write to guarantee this block is the second one
     
-    def evaluateIndividuals(self,iteration):
+    def evaluateIndividuals(self, iteration):
         fnDir = self._getExtraPath()
         newXdim = self.readInfoField(fnDir,"size",xmipp.MDL_XSIZE)
         angleStep = max(math.atan2(1,newXdim/2),self.minAngle.get())
@@ -318,7 +332,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         self._defineSourceRelation(self.inputParticles.get(),volSet)
         self._defineSourceRelation(self.inputVolumes.get(),volSet)
             
-    def reconstructNewVolumes(self,iteration):
+    def reconstructNewVolumes(self):
         fnDir = self._getExtraPath()
         newXdim = self.readInfoField(fnDir,"size",xmipp.MDL_XSIZE)
         angleStep = max(math.atan2(1,newXdim/2),self.minAngle.get())
@@ -371,7 +385,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             self.runJob("rm -f",fnDir+"/*iter00?_00.xmd",numberOfMpi=1)
             self.runJob("rm -f",fnDir+"/gallery*",numberOfMpi=1)
     
-    def cleanVolume(self,fnVol):
+    def cleanVolume(self, fnVol):
         # Generate mask if available
         if self.nextMask.hasValue():
             fnMask=self._getExtraPath("mask.vol")
@@ -412,7 +426,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             fnVol = self._getExtraPath("volume%03d.vol"%i)
             self.cleanVolume(fnVol)
 
-    def updateVolumes(self,iteration):
+    def updateVolumes(self):
         fnBest = self._getExtraPath("volumeBest.vol")
         fnInternal = self._getExtraPath("internalBest.vol")
         fnExternal = self._getExtraPath("externalBest.vol")
@@ -435,7 +449,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         cleanPath(fnInternal)
         cleanPath(fnExternal)
 
-    def calculateAverage(self,iteration):
+    def calculateAverage(self, iteration):
         fnAvg = self._getExtraPath("volumeAvg.vol")
         N=0
         for i in range(self.inputVolumes.get().getSize()):
