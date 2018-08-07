@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     Carlos Oscar Sorzano (coss@cnb.csic.es)
+# *              Tomas Majtner (tmajtner@cnb.csic.es)  -- streaming version
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -27,30 +28,26 @@
 Protocol to perform high-resolution reconstructions
 """
 
-from glob import glob
+import os
 import math
 import random
-from itertools import izip
 
+from datetime import datetime
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam, IntParam, EnumParam, NumericListParam
-from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink
+from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, IntParam
+from pyworkflow.utils.path import cleanPath, copyFile, moveFile
 from pyworkflow.em.protocol import ProtRefine3D
-from pyworkflow.em.data import SetOfVolumes, Volume
-from pyworkflow.em.metadata.utils import getFirstRow, getSize
-from pyworkflow.utils.utils import getFloatListFromValues
+from pyworkflow.em.data import Volume, SetOfParticles
+from pyworkflow.object import Set
 from convert import writeSetOfParticles
-from os.path import join, exists, split
-from pyworkflow.em.packages.xmipp3.convert import createItemMatrix, setXmippAttributes, getImageLocation
+from os.path import join, exists
+from pyworkflow.em.packages.xmipp3.convert import getImageLocation
 from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
-import pyworkflow.em as em
+import pyworkflow.protocol.constants as cons
 
 import xmipp
-
-from xmipp3 import HelicalFinder
-
 
 
 class XmippProtReconstructSwarm(ProtRefine3D):
@@ -113,20 +110,117 @@ class XmippProtReconstructSwarm(ProtRefine3D):
     
     #--------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
+        self.iteration = 0
         self.imgsFn=self._getExtraPath('images.xmd')
-        self._insertFunctionStep('convertInputStep')
-        self._insertFunctionStep('evaluateIndividuals',0)
-        for self.iteration in range(1,self.numberOfIterations.get()+1):
-            self._insertFunctionStep('reconstructNewVolumes')
-            self._insertFunctionStep('postProcessing',self.iteration)
-            self._insertFunctionStep('evaluateIndividuals',self.iteration)
-            if self.iteration>1:
-                self._insertFunctionStep('updateVolumes')
-        self._insertFunctionStep('calculateAverage',self.numberOfIterations.get()+1)
-        self._insertFunctionStep('cleanVolume',self._getExtraPath("volumeAvg.vol"))
-        self._insertFunctionStep("createOutput")
+        firstStep = self._insertNewSteps()
+        self._insertFunctionStep('createOutputStep',
+                                 prerequisites=firstStep, wait=True)
     
     #--------------------------- STEPS functions ---------------------------------------------------
+    def createOutputStep(self):
+        pass
+
+    def _getFirstJoinStepName(self):
+        # This function will be used for streaming, to check which is
+        # the first function that need to wait for all particles
+        # to have completed, this can be overriden in subclasses
+        # (e.g., in Xmipp 'sortPSDStep')
+        return 'createOutputStep'
+
+    def _getFirstJoinStep(self):
+        for s in self._steps:
+            if s.funcName == self._getFirstJoinStepName():
+                return s
+        return None
+
+    def _insertNewSteps(self):
+        deps = []
+        step1 = self._insertFunctionStep('convertInputStep', prerequisites=[])
+        step2 = self._insertFunctionStep('evaluateIndividuals', self.iteration,
+                                          prerequisites=[step1])
+        step3 = self._insertFunctionStep('reconstructNewVolumes',
+                                          prerequisites=[step2])
+        step4 = self._insertFunctionStep('postProcessing', self.iteration,
+                                          prerequisites=[step3])
+        step5 = self._insertFunctionStep('evaluateIndividuals', self.iteration,
+                                          prerequisites=[step4])
+        if self.iteration > 1:
+            step6 = self._insertFunctionStep('updateVolumes',
+                                             prerequisites=[step5])
+            deps.append(step6)
+        else:
+            deps.append(step5)
+        self.iteration = self.iteration + 1
+        
+
+        return deps
+
+    def _stepsCheck(self):
+        # Input particles set can be loaded or None when checked for new inputs
+        # If None, we load it
+        self._checkNewInput()
+        self._checkNewOutput()
+
+    def _checkNewInput(self):
+        # Check if there are new particles to process from the input set
+        partsFile = self.inputParticles.get().getFileName()
+        self.partsSet = SetOfParticles(filename=partsFile)
+        self.partsSet.loadAllProperties()
+        self.streamClosed = self.partsSet.isStreamClosed()
+        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
+        mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
+        # If the input movies.sqlite have not changed since our last check,
+        # it does not make sense to check for new input data
+        if self.lastCheck > mTime:
+            return None
+        outputStep = self._getFirstJoinStep()
+        fDeps = self._insertNewSteps()
+        if outputStep is not None:
+            outputStep.addPrerequisites(*fDeps)
+        self.updateSteps()
+
+    def _checkNewOutput(self):
+        if getattr(self, 'streamClosed', False):
+            return
+        else:
+            self._insertFunctionStep('calculateAverage', self.iteration)
+            self._insertFunctionStep('cleanVolume',
+                                     self._getExtraPath("volumeAvg.vol"))
+            self._insertFunctionStep("createOutput")
+            outputStep = self._getFirstJoinStep()
+            if outputStep and outputStep.isWaiting():
+                outputStep.setStatus(cons.STATUS_NEW)
+
+    def createOutput(self):
+        fnDir = self._getExtraPath()
+        Ts = self.readInfoField(fnDir, "sampling", xmipp.MDL_SAMPLINGRATE)
+
+        # Final average
+        TsOrig = self.inputParticles.get().getSamplingRate()
+        XdimOrig = self.inputParticles.get().getDimensions()[0]
+        fnAvg = self._getExtraPath("volumeAvg.vol")
+        self.runJob("xmipp_image_resize",
+                    "-i %s --dim %d" % (fnAvg, XdimOrig), numberOfMpi=1)
+        volume = Volume()
+        volume.setFileName(fnAvg)
+        volume.setSamplingRate(TsOrig)
+        self._defineOutputs(outputVolume=volume)
+        self._defineSourceRelation(self.inputParticles.get(), volume)
+        self._defineSourceRelation(self.inputVolumes.get(), volume)
+
+        # Swarm of volumes
+        volSet = self._createSetOfVolumes()
+        volSet.setSamplingRate(Ts)
+        for i in range(self.inputVolumes.get().getSize()):
+            fnVol = self._getExtraPath("volume%03d_best.vol" % i)
+            vol = Volume()
+            vol.setFileName(fnVol)
+            vol.setSamplingRate(Ts)
+            volSet.append(vol)
+        self._defineOutputs(outputVolumes=volSet)
+        self._defineSourceRelation(self.inputParticles.get(), volSet)
+        self._defineSourceRelation(self.inputVolumes.get(), volSet)
+
     def readInfoField(self,fnDir,block,label):
         mdInfo = xmipp.MetaData("%s@%s"%(block,join(fnDir,"info.xmd")))
         return mdInfo.getValue(label,mdInfo.firstObject())
@@ -302,35 +396,6 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                 md.setValue(xmipp.MDL_WEIGHT,bestWeightVol[i],objId)
                 md.setValue(xmipp.MDL_ITER,bestIterVol[i],objId)
             md.write("bestByVolume@"+self._getExtraPath("swarm.xmd"),xmipp.MD_APPEND)
-        
-    def createOutput(self):
-        fnDir = self._getExtraPath()
-        Ts=self.readInfoField(fnDir,"sampling",xmipp.MDL_SAMPLINGRATE)
-
-        # Final average
-        TsOrig=self.inputParticles.get().getSamplingRate()
-        XdimOrig=self.inputParticles.get().getDimensions()[0]
-        fnAvg = self._getExtraPath("volumeAvg.vol")
-        self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnAvg,XdimOrig),numberOfMpi=1)
-        volume=Volume()
-        volume.setFileName(fnAvg)
-        volume.setSamplingRate(TsOrig)
-        self._defineOutputs(outputVolume=volume)
-        self._defineSourceRelation(self.inputParticles.get(),volume)
-        self._defineSourceRelation(self.inputVolumes.get(),volume)
-        
-        # Swarm of volumes
-        volSet = self._createSetOfVolumes()
-        volSet.setSamplingRate(Ts)
-        for i in range(self.inputVolumes.get().getSize()):
-            fnVol = self._getExtraPath("volume%03d_best.vol"%i)
-            vol=Volume()
-            vol.setFileName(fnVol)
-            vol.setSamplingRate(Ts)
-            volSet.append(vol)
-        self._defineOutputs(outputVolumes=volSet)
-        self._defineSourceRelation(self.inputParticles.get(),volSet)
-        self._defineSourceRelation(self.inputVolumes.get(),volSet)
             
     def reconstructNewVolumes(self):
         fnDir = self._getExtraPath()
