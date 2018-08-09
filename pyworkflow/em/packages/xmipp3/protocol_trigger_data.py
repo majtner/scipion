@@ -47,21 +47,23 @@ class XmippProtTriggerData(ProtProcessParticles):
                       label='Minimum output size',
                       help='How many particles need to be on input to '
                            'create output set.')
-        form.addParam('checkInterval', IntParam, default=60,
-                      label="Check for new objects each (sec)",
-                      help="Check for new objects each checkInterval seconds")
         form.addParam('allParticles', BooleanParam, default=False,
                       label='Send all particles to output?',
                       help='If NO is selected, only subset of "Output size" '
                            'particles will be send to output.')
-        form.addParam('delay', IntParam, default=1,
-                      label="Delay (sec)", expertLevel=cons.LEVEL_ADVANCED,
+        form.addParam('splitParticles', BooleanParam, default=True,
+                      label='Split particles to multiple sets?',
+                      condition='allParticles',
+                      help='If NO is selected, only one subset of '
+                           '"Output size" particles will be send to output.')
+        form.addParam('delay', IntParam, default=1, label="Delay (sec)",
                       help="Delay in seconds before checking new output")
 
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         self.finished = False
         self.particles = []
+        self.splitedParticles = []
         partsSteps = self.delayStep()
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=partsSteps, wait=True)
@@ -110,6 +112,7 @@ class XmippProtTriggerData(ProtProcessParticles):
         else:
             self.newParticles = [m.clone() for m in self.partsSet]
 
+        self.splitedParticles = self.splitedParticles + self.newParticles
         self.particles = self.particles + self.newParticles
         if len(self.newParticles) > 0:
             for p in self.partsSet.iterItems(orderBy='creation',
@@ -124,15 +127,24 @@ class XmippProtTriggerData(ProtProcessParticles):
 
         if len(self.particles) >= self.outputSize:
             if self.allParticles:
-                if not os.path.exists(self._getPath('particles.sqlite')):
-                    imageSet = self._loadOutputSet(SetOfParticles,
-                                                   'particles.sqlite',
-                                                   self.particles)
+                if self.splitParticles:
+                    if len(self.splitedParticles) >= self.outputSize:
+                        imageSet = self._loadOutputSet(SetOfParticles, 'particles%d.sqlite'% ((len(self.particles) / int(self.outputSize))), self.splitedParticles)
+                        self._updateOutputSet('outputParticles%d' % (
+                        (len(self.particles) / int(self.outputSize))),
+                                              imageSet, streamMode)
+                        self.splitedParticles = []
                 else:
-                    imageSet = self._loadOutputSet(SetOfParticles,
-                                                   'particles.sqlite',
-                                                   self.newParticles)
-                self._updateOutputSet('outputParticles', imageSet, streamMode)
+                    if not os.path.exists(self._getPath('particles.sqlite')):
+                        imageSet = self._loadOutputSet(SetOfParticles,
+                                                       'particles.sqlite',
+                                                       self.particles)
+                    else:
+                        imageSet = self._loadOutputSet(SetOfParticles,
+                                                       'particles.sqlite',
+                                                       self.newParticles)
+                    self._updateOutputSet('outputParticles', imageSet,
+                                          streamMode)
 
             elif not os.path.exists(self._getPath('particles.sqlite')):
                 imageSet = self._loadOutputSet(SetOfParticles,
