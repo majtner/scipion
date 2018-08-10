@@ -110,7 +110,8 @@ class XmippProtReconstructSwarm(ProtRefine3D):
     
     #--------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        self.iteration = 0
+        self.iteration = 1
+        self.finished = False
         self.imgsFn=self._getExtraPath('images.xmd')
         firstStep = self._insertNewSteps()
         self._insertFunctionStep('createOutputStep',
@@ -136,14 +137,15 @@ class XmippProtReconstructSwarm(ProtRefine3D):
     def _insertNewSteps(self):
         deps = []
         step1 = self._insertFunctionStep('convertInputStep', prerequisites=[])
-        step2 = self._insertFunctionStep('evaluateIndividuals', self.iteration,
-                                          prerequisites=[step1])
+        step2 = self._insertFunctionStep('evaluateIndividuals',
+                                         self.iteration - 1,
+                                         prerequisites=[step1])
         step3 = self._insertFunctionStep('reconstructNewVolumes',
-                                          prerequisites=[step2])
+                                         prerequisites=[step2])
         step4 = self._insertFunctionStep('postProcessing', self.iteration,
-                                          prerequisites=[step3])
+                                         prerequisites=[step3])
         step5 = self._insertFunctionStep('evaluateIndividuals', self.iteration,
-                                          prerequisites=[step4])
+                                         prerequisites=[step4])
         if self.iteration > 1:
             step6 = self._insertFunctionStep('updateVolumes',
                                              prerequisites=[step5])
@@ -151,8 +153,6 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         else:
             deps.append(step5)
         self.iteration = self.iteration + 1
-        
-
         return deps
 
     def _stepsCheck(self):
@@ -167,6 +167,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         self.partsSet = SetOfParticles(filename=partsFile)
         self.partsSet.loadAllProperties()
         self.streamClosed = self.partsSet.isStreamClosed()
+        self.partsSet.close()
         self.lastCheck = getattr(self, 'lastCheck', datetime.now())
         mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
         # If the input movies.sqlite have not changed since our last check,
@@ -180,16 +181,18 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         self.updateSteps()
 
     def _checkNewOutput(self):
-        if getattr(self, 'streamClosed', False):
+        if getattr(self, 'finished', False):
             return
         else:
-            self._insertFunctionStep('calculateAverage', self.iteration)
-            self._insertFunctionStep('cleanVolume',
-                                     self._getExtraPath("volumeAvg.vol"))
-            self._insertFunctionStep("createOutput")
+            self.finished = (self.streamClosed)
             outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
+            if self.finished:  # Unlock createOutputStep if finished all jobs
+                self._insertFunctionStep('calculateAverage', self.iteration)
+                self._insertFunctionStep('cleanVolume',
+                                         self._getExtraPath("volumeAvg.vol"))
+                self._insertFunctionStep("createOutput")
+                if outputStep and outputStep.isWaiting():
+                    outputStep.setStatus(cons.STATUS_NEW)
 
     def createOutput(self):
         fnDir = self._getExtraPath()
